@@ -1,0 +1,88 @@
+"""Service for logging AI tasks."""
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import uuid
+from datetime import datetime
+from typing import Any, Dict, Optional
+
+from sqlalchemy.orm import Session
+
+from app.core.database import SessionLocal
+from app.models.ai_task_log import AITaskLog
+
+logger = logging.getLogger(__name__)
+
+
+async def log_ai_task(
+    scene_type: str,
+    input_data: Dict[str, Any],
+    output_result: Optional[Dict[str, Any]] = None,
+    guide_id: Optional[str] = None,
+    model_name: Optional[str] = None,
+    latency_ms: Optional[int] = None,
+    task_id: Optional[str] = None,
+) -> str:
+    """
+    Asynchronously log an AI task to the database.
+    
+    Args:
+        scene_type: Type of AI task (copy, product_analyze, intent)
+        input_data: Input data as dictionary
+        output_result: Output result as dictionary (optional)
+        guide_id: Guide ID (optional)
+        model_name: Model name used (optional)
+        latency_ms: Request latency in milliseconds (optional)
+        task_id: Task ID (optional, will be generated if not provided)
+        
+    Returns:
+        Task ID
+    """
+    if task_id is None:
+        task_id = str(uuid.uuid4())
+    
+    logger.info(f"[LOG_SERVICE] ========== Logging AI Task ==========")
+    logger.info(f"[LOG_SERVICE] Task ID: {task_id}")
+    logger.info(f"[LOG_SERVICE] Input parameters:")
+    logger.info(f"[LOG_SERVICE]   - scene_type: {scene_type}")
+    logger.info(f"[LOG_SERVICE]   - guide_id: {guide_id}")
+    logger.info(f"[LOG_SERVICE]   - model_name: {model_name}")
+    logger.info(f"[LOG_SERVICE]   - latency_ms: {latency_ms}")
+    logger.info(f"[LOG_SERVICE] Input data: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
+    if output_result:
+        logger.info(f"[LOG_SERVICE] Output result: {json.dumps(output_result, ensure_ascii=False, indent=2)}")
+    
+    # Run database operation in thread pool to avoid blocking
+    def _save_log():
+        db = SessionLocal()
+        try:
+            logger.info(f"[LOG_SERVICE] Saving to database...")
+            log_entry = AITaskLog(
+                task_id=task_id,
+                guide_id=guide_id,
+                scene_type=scene_type,
+                input_data=json.dumps(input_data, ensure_ascii=False),
+                output_result=json.dumps(output_result, ensure_ascii=False) if output_result else None,
+                model_name=model_name,
+                latency_ms=latency_ms,
+                is_adopted=False,
+            )
+            db.add(log_entry)
+            db.commit()
+            logger.info(f"[LOG_SERVICE] ✓ AI task logged successfully: task_id={task_id}, scene_type={scene_type}")
+        except Exception as e:
+            logger.error(f"[LOG_SERVICE] ✗ Failed to log AI task: {e}", exc_info=True)
+            db.rollback()
+        finally:
+            db.close()
+    
+    # Execute in thread pool
+    logger.info(f"[LOG_SERVICE] Executing database save in thread pool...")
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _save_log)
+    logger.info(f"[LOG_SERVICE] ========== Logging Completed ==========")
+    
+    return task_id
+

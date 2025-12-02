@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+sqlalchemy>=2.0.0
+pymysql
+python-dotenv
+pydantic-settings
+httpx
