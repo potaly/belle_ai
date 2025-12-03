@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     app_name: str = "AI Smart Guide Service"
-    app_version: str = "4.0.0"
+    app_version: str = "4.0.1"
     app_env: str = "dev"  # Environment: dev, test, prod
 
     # Database settings
