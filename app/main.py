@@ -5,6 +5,7 @@ from fastapi import FastAPI
 
 from app.api.v1 import (
     copy as copy_router,
+    followup as followup_router,
     intent as intent_router,
     product as product_router,
     rag_debug as rag_debug_router,
@@ -33,6 +34,7 @@ app.include_router(product_router.router)
 app.include_router(vector_search_router.router)  # V2: 向量搜索API
 app.include_router(rag_debug_router.router)  # V2: RAG 调试端点（仅 DEBUG 模式）
 app.include_router(intent_router.router)  # V3: 意图分析API
+app.include_router(followup_router.router)  # V3: 跟进建议API
 
 
 @app.get("/health")
