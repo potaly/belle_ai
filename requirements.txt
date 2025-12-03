@@ -5,3 +5,5 @@ pymysql
 python-dotenv
 pydantic-settings
 httpx
+faiss-cpu
+numpy

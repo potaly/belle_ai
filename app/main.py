@@ -3,7 +3,7 @@ import logging
 
 from fastapi import FastAPI
 
-from app.api.v1 import copy as copy_router, product as product_router
+from app.api.v1 import copy as copy_router, product as product_router, vector_search as vector_search_router
 from app.api.v1.router import router as v1_router
 from app.core.config import get_settings
 
@@ -24,6 +24,7 @@ app = FastAPI(
 app.include_router(v1_router)
 app.include_router(copy_router.router)
 app.include_router(product_router.router)
+app.include_router(vector_search_router.router)  # V2: 向量搜索API
 
 
 @app.get("/health")

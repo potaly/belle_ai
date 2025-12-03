@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     app_name: str = "AI Smart Guide Service"
-    app_version: str = "1.0.0"
+    app_version: str = "2.0.1"
     app_env: str = "dev"  # Environment: dev, test, prod
 
     # Database settings
@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     llm_base_url: str | None = None
     llm_model: str = "mock-llm"
+
+    # Embedding settings (V2+)
+    # If not set, will fall back to LLM settings
+    embedding_api_key: str | None = None
+    embedding_base_url: str | None = None
+    embedding_model: str = "text-embedding-v2"  # 阿里百炼默认嵌入模型，支持中英文双语
 
     # API settings
     api_v1_prefix: str = "/api/v1"
