@@ -1,7 +1,11 @@
 """Copy generation API endpoints."""
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
+import time
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -9,7 +13,10 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.schemas.copy_schemas import CopyRequest, CopyStyle
-from app.services.copy_service import generate_copy_stream
+from app.services.copy_service import prepare_copy_generation
+from app.services.llm_client import get_llm_client, LLMClientError
+from app.services.log_service import log_ai_task
+from app.services.prompt_builder import PromptBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -41,33 +48,99 @@ async def generate_copy(
     logger.info(f"[API] Request parameters: sku={request.sku}, style={request.style.value}, guide_id={guide_id}")
     logger.info(f"[API] Request body: {request.model_dump()}")
     
-    # Validate product exists BEFORE creating stream
-    # This ensures we can return proper HTTP error before streaming starts
-    from app.repositories.product_repository import get_product_by_sku
-    
-    logger.info("[API] Step 1: Validating product exists...")
-    product = get_product_by_sku(db, request.sku)
-    if not product:
-        logger.warning(f"[API] Product not found: sku={request.sku}")
-        raise HTTPException(status_code=404, detail=f"Product with SKU {request.sku} not found")
-    logger.info(f"[API] ✓ Product found: name={product.name}, sku={product.sku}")
-    
     try:
-        logger.info("[API] Step 2: Creating streaming response...")
-        # Generate streaming response
-        stream = generate_copy_stream(
+        logger.info("[API] Step 1: Preparing copy generation (load product, RAG, build prompt)...")
+        start_time = time.time()
+        task_id = str(uuid.uuid4())
+        
+        # Prepare: load product, retrieve RAG, build prompt
+        product, prompt, prompt_tokens, rag_used, rag_context, model_name = prepare_copy_generation(
             db=db,
             sku=request.sku,
             style=request.style,
-            guide_id=guide_id,
         )
         
-        logger.info("[API] Step 3: Returning StreamingResponse")
+        # Prepare input data for logging
+        input_data = {
+            "sku": request.sku,
+            "product_name": product.name,
+            "tags": product.tags,
+            "style": request.style.value,
+            "rag_used": rag_used,
+            "rag_context_count": len(rag_context),
+        }
+        
+        logger.info("[API] Step 3: Creating streaming response with LLM...")
+        llm_client = get_llm_client()
+        system_prompt = "你是一个专业的鞋类销售文案写手，擅长写吸引人的朋友圈文案。"
+        
+        async def generate_sse_stream():
+            """Generate SSE-formatted stream from LLM."""
+            full_response = ""
+            chunk_count = 0
+            
+            try:
+                async for chunk in llm_client.stream_chat(
+                    prompt,
+                    system=system_prompt,
+                    temperature=0.8,
+                    max_tokens=200,
+                ):
+                    if chunk:
+                        full_response += chunk
+                        chunk_count += 1
+                        # Wrap in SSE format
+                        yield f"data: {chunk}\n\n"
+                        
+                        if chunk_count <= 3:
+                            logger.debug(f"[API] Chunk #{chunk_count}: {chunk[:50]}...")
+            except LLMClientError as e:
+                logger.error(f"[API] ✗ LLM streaming failed: {e}")
+                error_msg = "抱歉，文案生成失败，请稍后重试。"
+                yield f"data: {error_msg}\n\n"
+                full_response = error_msg
+            
+            # Calculate metrics after streaming completes
+            latency_ms = int((time.time() - start_time) * 1000)
+            output_tokens = PromptBuilder.estimate_tokens(full_response)
+            
+            logger.info(f"[API] Step 4: Streaming completed. Chunks: {chunk_count}, Latency: {latency_ms}ms")
+            logger.info(f"[API] Generated response: {len(full_response)} chars, ~{output_tokens} tokens")
+            
+            # Log task asynchronously
+            output_data = {
+                "task_id": task_id,
+                "latency_ms": latency_ms,
+                "response": full_response,
+                "response_length": len(full_response),
+                "prompt_token_estimate": prompt_tokens,
+                "output_token_estimate": output_tokens,
+                "rag_used": rag_used,
+                "rag_context_count": len(rag_context),
+            }
+            
+            asyncio.create_task(
+                log_ai_task(
+                    scene_type="copy",
+                    input_data=input_data,
+                    output_result=output_data,
+                    guide_id=guide_id,
+                    model_name=model_name,
+                    latency_ms=latency_ms,
+                    task_id=task_id,
+                    prompt_token_estimate=prompt_tokens,
+                    output_token_estimate=output_tokens,
+                    rag_used=rag_used,
+                )
+            )
+            logger.info("[API] ✓ Task logging initiated (async)")
+        
+        logger.info("[API] Step 5: Returning StreamingResponse")
         logger.info("[API] ✓ Request processed successfully, streaming started")
         logger.info("=" * 80)
         
         return StreamingResponse(
-            stream,
+            generate_sse_stream(),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",

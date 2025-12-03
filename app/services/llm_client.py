@@ -207,11 +207,25 @@ class LLMClient:
             "temperature": payload.get("temperature"),
             "max_tokens": payload.get("max_tokens"),
         }
+        # Ensure URL ends with /chat/completions for logging
+        log_url = self.settings.llm_base_url
+        if not log_url.endswith("/chat/completions"):
+            if log_url.endswith("/"):
+                log_url = log_url.rstrip("/")
+            log_url = f"{log_url}/chat/completions"
+        
         logger.info(
             "LLM stream request: url=%s, payload=%s",
-            self.settings.llm_base_url,
+            log_url,
             json.dumps(safe_payload, ensure_ascii=False),
         )
+        
+        # Ensure URL ends with /chat/completions
+        base_url = self.settings.llm_base_url
+        if not base_url.endswith("/chat/completions"):
+            if base_url.endswith("/"):
+                base_url = base_url.rstrip("/")
+            base_url = f"{base_url}/chat/completions"
         
         start_time = perf_counter()
         max_retries = 3
@@ -222,18 +236,25 @@ class LLMClient:
                 async with httpx.AsyncClient(timeout=self._timeout) as client:
                     async with client.stream(
                         "POST",
-                        self.settings.llm_base_url,
+                        base_url,
                         headers=headers,
                         json=payload,
                     ) as response:
                         # Check HTTP status
                         if response.status_code != 200:
-                            error_text = await response.aread()
-                            error_detail = error_text.decode('utf-8', errors='ignore')[:500]
+                            # Try to read error response
+                            error_detail = ""
+                            try:
+                                error_text = await response.aread()
+                                error_detail = error_text.decode('utf-8', errors='ignore')[:500]
+                            except Exception as read_err:
+                                error_detail = f"Failed to read error response: {read_err}"
+                            
                             logger.error(
-                                "LLM stream request failed: status=%s, error=%s",
+                                "LLM stream request failed: status=%s, error=%s, url=%s",
                                 response.status_code,
-                                error_detail,
+                                error_detail or "No error details available",
+                                base_url,
                             )
                             if attempt < max_retries:
                                 # Exponential backoff
@@ -248,7 +269,7 @@ class LLMClient:
                                 continue
                             else:
                                 raise LLMClientError(
-                                    f"LLM stream request failed with status {response.status_code}: {error_detail}"
+                                    f"LLM stream request failed with status {response.status_code}: {error_detail or 'No error details'}"
                                 )
                         
                         # Process streaming response (Server-Sent Events format)
@@ -313,43 +334,116 @@ class LLMClient:
                         return
                         
             except httpx.TimeoutException as exc:
+                error_details = f"Timeout after {self._timeout.read} seconds"
                 if attempt == max_retries:
-                    logger.error("LLM stream request timed out after %d attempts", max_retries)
-                    raise LLMClientError("LLM stream request timed out") from exc
+                    logger.error(
+                        "LLM stream request timed out after %d attempts: %s (url=%s)",
+                        max_retries,
+                        error_details,
+                        base_url,
+                    )
+                    raise LLMClientError(f"LLM stream request timed out: {error_details}") from exc
                 delay = base_delay * (2 ** (attempt - 1))
                 logger.warning(
-                    "LLM stream timeout on attempt %d/%d, retrying in %.2fs...",
+                    "LLM stream timeout on attempt %d/%d: %s, retrying in %.2fs... (url=%s)",
                     attempt,
                     max_retries,
+                    error_details,
                     delay,
+                    base_url,
                 )
                 await asyncio.sleep(delay)
                 
             except httpx.HTTPStatusError as exc:
+                # Try to extract error information
+                error_details = f"HTTP {exc.response.status_code if exc.response else 'unknown'}"
+                
+                # Try to get error message from exception
+                error_msg = str(exc)
+                if error_msg and error_msg != error_details:
+                    error_details += f": {error_msg[:500]}"
+                
+                # Try to read error response if available (may not work for stream responses)
+                try:
+                    if hasattr(exc, 'response') and exc.response:
+                        # For non-stream responses, try to get text
+                        if hasattr(exc.response, 'text'):
+                            try:
+                                error_text = exc.response.text
+                                if error_text:
+                                    error_details += f" (response: {error_text[:300]})"
+                            except:
+                                pass
+                except Exception as read_err:
+                    # Ignore read errors
+                    pass
+                
                 if attempt == max_retries:
-                    logger.error("LLM stream HTTP error: %s", exc)
-                    raise LLMClientError(f"LLM stream request failed: {exc}") from exc
+                    logger.error(
+                        "LLM stream HTTP error after %d attempts: %s (url=%s)",
+                        max_retries,
+                        error_details,
+                        base_url,
+                    )
+                    raise LLMClientError(f"LLM stream request failed: {error_details}") from exc
                 delay = base_delay * (2 ** (attempt - 1))
                 logger.warning(
-                    "LLM stream HTTP error on attempt %d/%d: %s, retrying in %.2fs...",
+                    "LLM stream HTTP error on attempt %d/%d: %s, retrying in %.2fs... (url=%s)",
                     attempt,
                     max_retries,
-                    exc,
+                    error_details,
                     delay,
+                    base_url,
                 )
                 await asyncio.sleep(delay)
                 
             except httpx.RequestError as exc:
+                # Extract detailed error information
+                error_type = type(exc).__name__
+                error_msg = str(exc) if exc else "Unknown transport error"
+                
+                # For ConnectError, try to get more details from the underlying exception
+                if isinstance(exc, httpx.ConnectError):
+                    # Get the underlying exception if available
+                    if hasattr(exc, '__cause__') and exc.__cause__:
+                        underlying = exc.__cause__
+                        underlying_type = type(underlying).__name__
+                        underlying_msg = str(underlying) if underlying else ""
+                        error_details = f"{error_type} ({underlying_type}): {underlying_msg or error_msg or 'Connection failed'}"
+                    else:
+                        error_details = f"{error_type}: Connection failed (network unreachable or DNS resolution failed)"
+                else:
+                    error_details = f"{error_type}: {error_msg}"
+                
+                # Add helpful suggestions for common errors
+                suggestions = []
+                if isinstance(exc, httpx.ConnectError):
+                    suggestions.append("Check network connection")
+                    suggestions.append("Verify URL is accessible: " + base_url)
+                    suggestions.append("Check firewall/proxy settings")
+                    suggestions.append("Verify SSL/TLS certificates")
+                
                 if attempt == max_retries:
-                    logger.error("LLM stream transport error: %s", exc)
-                    raise LLMClientError(f"LLM stream transport error: {exc}") from exc
+                    error_full = f"{error_details}"
+                    if suggestions:
+                        error_full += f" (Suggestions: {', '.join(suggestions)})"
+                    logger.error(
+                        "LLM stream transport error after %d attempts: %s (type=%s, url=%s)",
+                        max_retries,
+                        error_full,
+                        error_type,
+                        base_url,
+                        exc_info=True,
+                    )
+                    raise LLMClientError(f"LLM stream transport error: {error_full}") from exc
                 delay = base_delay * (2 ** (attempt - 1))
                 logger.warning(
-                    "LLM stream transport error on attempt %d/%d: %s, retrying in %.2fs...",
+                    "LLM stream transport error on attempt %d/%d: %s, retrying in %.2fs... (url=%s)",
                     attempt,
                     max_retries,
-                    exc,
+                    error_details,
                     delay,
+                    base_url,
                 )
                 await asyncio.sleep(delay)
                 

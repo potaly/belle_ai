@@ -24,6 +24,9 @@ async def log_ai_task(
     model_name: Optional[str] = None,
     latency_ms: Optional[int] = None,
     task_id: Optional[str] = None,
+    prompt_token_estimate: Optional[int] = None,
+    output_token_estimate: Optional[int] = None,
+    rag_used: Optional[bool] = None,
 ) -> str:
     """
     Asynchronously log an AI task to the database.
@@ -50,9 +53,23 @@ async def log_ai_task(
     logger.info(f"[LOG_SERVICE]   - guide_id: {guide_id}")
     logger.info(f"[LOG_SERVICE]   - model_name: {model_name}")
     logger.info(f"[LOG_SERVICE]   - latency_ms: {latency_ms}")
+    logger.info(f"[LOG_SERVICE]   - prompt_token_estimate: {prompt_token_estimate}")
+    logger.info(f"[LOG_SERVICE]   - output_token_estimate: {output_token_estimate}")
+    logger.info(f"[LOG_SERVICE]   - rag_used: {rag_used}")
     logger.info(f"[LOG_SERVICE] Input data: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
     if output_result:
         logger.info(f"[LOG_SERVICE] Output result: {json.dumps(output_result, ensure_ascii=False, indent=2)}")
+    
+    # Add token estimates and RAG info to output_result if not present
+    if output_result is None:
+        output_result = {}
+    
+    if prompt_token_estimate is not None and "prompt_token_estimate" not in output_result:
+        output_result["prompt_token_estimate"] = prompt_token_estimate
+    if output_token_estimate is not None and "output_token_estimate" not in output_result:
+        output_result["output_token_estimate"] = output_token_estimate
+    if rag_used is not None and "rag_used" not in output_result:
+        output_result["rag_used"] = rag_used
     
     # Run database operation in thread pool to avoid blocking
     def _save_log():
