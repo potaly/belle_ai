@@ -16,6 +16,7 @@ from app.repositories.product_repository import get_product_by_sku
 from app.schemas.copy_schemas import CopyStyle
 from app.services.log_service import log_ai_task
 from app.services.streaming_generator import StreamingGenerator
+from app.services.llm_client import get_llm_client
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,9 @@ async def generate_copy_stream(
         logger.info(f"[SERVICE] Generated {len(posts)} posts")
         
         # Log task asynchronously (fire and forget)
+        llm_client = get_llm_client()
+        model_name = llm_client.settings.llm_model if (llm_client.settings.llm_api_key and llm_client.settings.llm_base_url) else "template-fallback"
+        
         output_data = {
             "task_id": task_id,
             "latency_ms": latency_ms,
@@ -114,7 +118,7 @@ async def generate_copy_stream(
                 input_data=input_data,
                 output_result=output_data,
                 guide_id=guide_id,
-                model_name="stub-generator",
+                model_name=model_name,
                 latency_ms=latency_ms,
                 task_id=task_id,
             )
