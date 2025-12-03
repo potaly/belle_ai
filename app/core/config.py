@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     app_name: str = "AI Smart Guide Service"
-    app_version: str = "2.0.1"
+    app_version: str = "2.0.2"
     app_env: str = "dev"  # Environment: dev, test, prod
 
     # Database settings
@@ -55,6 +55,9 @@ class Settings(BaseSettings):
 
     # Logging settings
     log_level: str = "info"  # debug, info, warning, error
+
+    # Debug settings
+    debug: bool = False  # Enable debug mode (DEBUG=true in .env)
 
     class Config:
         env_file = ".env"
