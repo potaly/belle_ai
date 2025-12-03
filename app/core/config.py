@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     # Logging settings
     log_level: str = "info"  # debug, info, warning, error
 
+    # Debug settings
+    debug: bool = False  # Enable debug mode (DEBUG=true in .env)
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
