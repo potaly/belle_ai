@@ -6,6 +6,8 @@
 
 AI Smart Guide Service 是一个基于 FastAPI 的智能导购服务，专为微信小程序等前端应用提供 AI 能力。服务通过分析商品信息和用户行为，为导购人员生成朋友圈文案、分析商品卖点，帮助提升销售效率。
 
+**V4 版本升级**：系统从"两个 API + RAG + 意图判断"升级为"一个可规划、可执行、多智能体协作的完整自动化销售 Agent"。
+
 ### 技术栈
 
 - **Web 框架**: FastAPI (Python 3.10+)
@@ -14,46 +16,124 @@ AI Smart Guide Service 是一个基于 FastAPI 的智能导购服务，专为微
 - **缓存**: Redis (可选，V2+)
 - **向量数据库**: FAISS (V2+)
 - **AI 模型**: 支持阿里百炼、DeepSeek、Qwen、OpenAI 等
+- **Agent 框架**: LangGraph (V4+)
+- **异步支持**: asyncio, httpx
 
 ---
 
-## V1 功能特性
+## 功能特性
 
-### 1. 商品文案生成 (`/ai/generate/copy`)
+### V1 功能
+
+#### 1. 商品文案生成 (`POST /ai/generate/copy`)
 - **流式响应**: 使用 Server-Sent Events (SSE) 实时返回生成内容
 - **低延迟**: 第一个 chunk 在 500ms 内发出
 - **多风格支持**: 自然、专业、幽默三种文案风格
 - **异步日志**: 自动记录 AI 任务日志到数据库
 
-### 2. 商品分析 (`/ai/analyze/product`)
+#### 2. 商品分析 (`POST /ai/analyze/product`)
 - **规则驱动**: 基于商品标签和属性智能分析
 - **结构化输出**: 返回核心卖点、风格标签、适用场景、适合人群、解决痛点
 - **自动推导**: 从 tags 和 attributes 自动推导分析结果
 
-### 3. 数据管理
+#### 3. 数据管理
 - **商品管理**: 支持商品信息存储和查询
 - **行为日志**: 记录用户浏览、收藏等行为
 - **AI 日志**: 记录所有 AI 调用任务，便于分析和优化
 
 ---
 
-## V2 功能特性
+### V2 功能
 
-### 1. 向量语义搜索 (`/ai/vector/search`)
+#### 1. 向量语义搜索 (`POST /ai/vector/search`)
 - **语义理解**: 使用阿里百炼嵌入模型，理解用户意图
 - **智能检索**: 基于 FAISS 向量数据库，快速搜索相似商品
+- **混合搜索**: 结合 SKU 精确匹配、关键词匹配和向量相似度
 - **中文优化**: 使用 `text-embedding-v2` 模型，对中文支持优秀
 - **灵活配置**: 支持自定义返回结果数量（top_k）
 
-### 2. RAG 知识库
-- **自动分块**: 将商品文本智能分割成小块
+#### 2. RAG 知识库
+- **自动分块**: 将商品文本智能分割成小块（约 300 字符，50 字符重叠）
 - **向量索引**: 使用 FAISS 构建高效的向量索引
 - **持久化存储**: 索引保存到磁盘，支持快速加载
+- **自然语言转换**: 将结构化商品数据转换为自然语言描述
 
-### 3. 初始化工具
+#### 3. RAG 调试端点 (`POST /admin/rag/preview`)
+- **调试模式**: 仅在 `DEBUG=true` 时可用
+- **详细输出**: 显示原始搜索结果和处理后的结果
+- **关键词提取**: 显示提取的关键词和 SKU
+- **匹配分析**: 显示匹配类型和评分详情
+
+#### 4. 初始化工具
 - **一键初始化**: 从 MySQL 数据库自动构建向量索引
 - **批量处理**: 支持大量商品数据的批量处理
 - **进度显示**: 实时显示初始化进度和统计信息
+
+---
+
+### V3 功能
+
+#### 1. 用户行为分析
+- **行为仓库** (`BehaviorRepository`): 高效查询用户行为日志
+- **行为摘要**: 自动汇总访问次数、停留时间、事件类型等
+- **意图分析引擎** (`IntentEngine`): 基于行为数据智能判断用户购买意图
+- **意图级别**: `high`、`medium`、`low`、`hesitating` 四级分类
+
+#### 2. 意图分析 API (`POST /ai/analyze/intent`)
+- **自动分析**: 根据用户行为日志自动分析购买意图
+- **详细原因**: 提供意图分类的文本原因说明
+- **行为摘要**: 返回完整的行为统计数据
+
+#### 3. 跟进建议服务 (`FollowupService`)
+- **混合策略**: 规则驱动 + LLM 生成
+- **个性化消息**: 根据用户意图生成个性化跟进建议
+- **反打扰机制**: 低意图用户自动跳过主动接触
+
+#### 4. 跟进建议 API (`POST /ai/followup/suggest`)
+- **智能建议**: 自动生成跟进动作和消息
+- **动作类型**: `send_coupon`、`ask_size`、`remind_stock` 等
+- **个性化文案**: 结合商品信息和用户行为生成文案
+
+---
+
+### V4 功能（AI Agent 系统）
+
+#### 1. 核心 Agent 框架
+- **AgentContext**: 统一上下文管理，支持状态和消息记忆
+- **AgentRunner**: Agent 节点执行器，提供日志和错误处理
+- **模块化设计**: 清晰的职责分离，易于扩展
+
+#### 2. Agent 工具层
+- **ProductTool**: 获取商品信息
+- **BehaviorTool**: 获取和汇总用户行为
+- **RAGTool**: 检索 RAG 上下文
+- **CopyTool**: 生成营销文案
+
+#### 3. Planner Agent
+- **智能规划**: 根据上下文动态生成执行计划
+- **规则驱动**: 基于业务规则决定任务顺序
+- **条件跳过**: 根据意图级别和反打扰规则跳过不必要任务
+
+#### 4. Worker Agents
+- **IntentAgent**: 意图分类节点
+- **CopyAgent**: 文案生成节点
+- **SalesAgent**: 反打扰检查节点
+
+#### 5. LangGraph 状态机
+- **状态机编排**: 使用 LangGraph 编排完整销售流程
+- **条件路由**: 根据业务规则动态决定执行路径
+- **提前结束**: 反打扰机制支持提前结束流程
+
+#### 6. 销售流程图 API (`POST /ai/sales/graph`)
+- **完整流程**: 执行 LangGraph 定义的完整销售流程
+- **自定义计划**: 支持使用 Planner 生成的自定义计划
+- **详细日志**: 完整的执行日志和统计信息
+
+#### 7. AI 智能销售 Agent API (`POST /ai/agent/sales_flow`) ⭐ **V4 最终产物**
+- **完整自动化**: 一个 API 调用完成全流程
+- **智能编排**: 自动规划、执行、协调所有 Agent 节点
+- **完整结果**: 返回商品信息、行为摘要、意图分析、生成文案等完整结果
+- **生产就绪**: 可直接用于生产环境的完整 Agent 系统
 
 ---
 
@@ -68,9 +148,14 @@ belle-ai-service/
 │   │   └── database.py         # 数据库配置（SQLAlchemy 2.0）
 │   ├── api/                     # API 路由
 │   │   └── v1/                 # API v1 版本
-│   │       ├── copy.py         # 文案生成接口
-│   │       ├── product.py      # 商品分析接口
-│   │       └── router.py       # 基础路由
+│   │       ├── copy.py         # 文案生成接口 (V1)
+│   │       ├── product.py      # 商品分析接口 (V1)
+│   │       ├── vector_search.py # 向量搜索接口 (V2)
+│   │       ├── rag_debug.py    # RAG 调试接口 (V2)
+│   │       ├── intent.py       # 意图分析接口 (V3)
+│   │       ├── followup.py     # 跟进建议接口 (V3)
+│   │       ├── sales_graph.py  # 销售流程图接口 (V4)
+│   │       └── agent_sales_flow.py # AI智能销售Agent接口 (V4)
 │   ├── models/                  # ORM 模型
 │   │   ├── product.py          # 商品模型
 │   │   ├── guide.py            # 导购模型
@@ -78,15 +163,44 @@ belle-ai-service/
 │   │   └── ai_task_log.py      # AI 任务日志模型
 │   ├── schemas/                 # Pydantic 模型
 │   │   ├── copy_schemas.py     # 文案生成请求/响应
-│   │   └── product_schemas.py  # 商品分析请求/响应
+│   │   ├── product_schemas.py  # 商品分析请求/响应
+│   │   ├── intent_schemas.py   # 意图分析请求/响应
+│   │   ├── followup_schemas.py # 跟进建议请求/响应
+│   │   ├── sales_graph_schemas.py # 销售流程图请求/响应
+│   │   └── agent_sales_flow_schemas.py # Agent请求/响应
 │   ├── services/                # 业务逻辑层
 │   │   ├── copy_service.py     # 文案生成服务
 │   │   ├── product_service.py  # 商品分析服务
-│   │   ├── streaming_generator.py # 流式生成器
 │   │   ├── log_service.py      # 日志服务
-│   │   └── llm_client.py       # LLM 客户端封装
-│   └── repositories/             # 数据访问层
-│       └── product_repository.py # 商品数据访问
+│   │   ├── llm_client.py       # LLM 客户端封装
+│   │   ├── embedding_client.py  # 嵌入模型客户端 (V2)
+│   │   ├── vector_store.py     # 向量存储服务 (V2)
+│   │   ├── rag_service.py      # RAG 服务 (V2)
+│   │   ├── prompt_builder.py   # 提示词构建器 (V2)
+│   │   ├── intent_engine.py    # 意图分析引擎 (V3)
+│   │   └── followup_service.py # 跟进建议服务 (V3)
+│   ├── repositories/             # 数据访问层
+│   │   ├── product_repository.py # 商品数据访问
+│   │   └── behavior_repository.py # 行为日志访问 (V3)
+│   ├── agents/                  # Agent 系统 (V4)
+│   │   ├── context.py          # Agent 上下文
+│   │   ├── agent_runner.py     # Agent 执行器
+│   │   ├── planner_agent.py     # 规划器
+│   │   ├── tools/              # Agent 工具
+│   │   │   ├── product_tool.py
+│   │   │   ├── behavior_tool.py
+│   │   │   ├── rag_tool.py
+│   │   │   └── copy_tool.py
+│   │   ├── workers/            # Worker Agents
+│   │   │   ├── intent_agent.py
+│   │   │   ├── copy_agent.py
+│   │   │   └── sales_agent.py
+│   │   └── graph/              # LangGraph 状态机
+│   │       └── sales_graph.py
+│   ├── db/                      # 数据库初始化
+│   │   └── init_vector_store.py # 向量索引初始化 (V2)
+│   └── utils/                   # 工具函数
+│       └── chunk_utils.py       # 文本分块工具 (V2)
 ├── sql/                          # SQL 脚本
 │   ├── schema.sql               # 数据库表结构
 │   └── seed_data.sql            # 种子数据
@@ -94,7 +208,11 @@ belle-ai-service/
 │   ├── PRD.md                   # 产品需求文档
 │   ├── Architecture.md          # 架构文档
 │   ├── product_analyze_api.md   # 商品分析接口文档
-│   └── tags_query_explanation.md # Tags 查询说明
+│   ├── vector_search_api.md     # 向量搜索接口文档
+│   ├── intent_analysis_api.md   # 意图分析接口文档
+│   ├── followup_api.md          # 跟进建议接口文档
+│   ├── sales_graph_api.md       # 销售流程图接口文档
+│   └── agent_sales_flow_api.md  # AI智能销售Agent接口文档
 ├── requirements.txt              # Python 依赖
 ├── .env.example                  # 环境变量示例
 └── README.md                     # 项目说明（本文件）
@@ -131,428 +249,357 @@ pip install -r requirements.txt
 复制 `.env.example` 为 `.env` 并填写配置：
 
 ```bash
-cp .env.example .env
-```
-
-编辑 `.env` 文件，配置数据库连接等信息。
-
-### 4. 初始化数据库
-
-#### 创建数据库
-
-```sql
-CREATE DATABASE belle_ai CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
-
-#### 导入表结构
-
-```bash
-mysql -u root -p belle_ai < sql/schema.sql
-```
-
-#### 导入种子数据
-
-```bash
-mysql -u root -p belle_ai < sql/seed_data.sql
-```
-
-或者使用 MySQL 客户端工具（如 Navicat、DBeaver）直接执行 SQL 文件。
-
-### 5. 启动服务
-
-```bash
-# 使用 uvicorn 启动
-uvicorn app.main:app --reload
-
-# 或者指定主机和端口
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
-```
-
-服务启动后，访问以下地址：
-
-- **API 文档**: http://127.0.0.1:8000/docs
-- **健康检查**: http://127.0.0.1:8000/health
-- **根端点**: http://127.0.0.1:8000/
-
----
-
-## 接口说明
-
-### 1. 商品文案生成接口 (`/ai/generate/copy`)
-
-#### 功能说明
-
-生成微信朋友圈文案，支持流式返回（SSE），第一个 chunk 在 500ms 内发出。
-
-#### 请求示例
-
-```bash
-POST /ai/generate/copy
-Content-Type: application/json
-
-{
-  "sku": "8WZ01CM1",
-  "style": "natural"
-}
-```
-
-#### 响应格式
-
-使用 Server-Sent Events (SSE) 流式返回，格式如下：
-
-```
-data: {"type": "start", "total": 3, "style": "natural"}
-
-data: {"type": "post_start", "index": 1, "total": 3}
-
-data: {"type": "token", "content": "今天推荐这款", "index": 1, "position": 0}
-
-data: {"type": "post_end", "index": 1, "content": "今天推荐这款运动鞋女2024新款时尚，百搭、舒适、时尚的设计真的很赞！适合日常穿搭，快来私信我了解更多～"}
-
-data: {"type": "complete", "posts": [...]}
-```
-
-#### 工作原理
-
-1. **接收请求**: API 层接收 SKU 和风格参数
-2. **查询商品**: 从数据库查询商品信息（包含 tags 和 attributes）
-3. **流式生成**: 使用 StreamingGenerator 逐字符/逐块生成文案
-4. **实时返回**: 通过 SSE 实时推送生成的内容
-5. **异步日志**: 后台记录 AI 任务日志到数据库
-
-#### 特点
-
-- ✅ **低延迟**: 第一个 chunk 在 500ms 内发出
-- ✅ **流式体验**: 用户可以看到文案逐步生成
-- ✅ **多风格**: 支持 natural（自然）、professional（专业）、funny（幽默）
-- ✅ **自动日志**: 所有调用自动记录到 `ai_task_log` 表
-
-#### 使用示例
-
-**Python**:
-```python
-import httpx
-
-response = httpx.post(
-    "http://127.0.0.1:8000/ai/generate/copy",
-    json={"sku": "8WZ01CM1", "style": "natural"},
-    stream=True
-)
-
-for line in response.iter_lines():
-    if line.startswith("data: "):
-        data = json.loads(line[6:])
-        print(data)
-```
-
-**JavaScript**:
-```javascript
-const eventSource = new EventSource('http://127.0.0.1:8000/ai/generate/copy', {
-  method: 'POST',
-  body: JSON.stringify({ sku: '8WZ01CM1', style: 'natural' })
-});
-
-eventSource.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log(data);
-};
-```
-
----
-
-### 2. 商品分析接口 (`/ai/analyze/product`)
-
-#### 功能说明
-
-基于规则逻辑分析商品，返回结构化的卖点、风格、场景等信息。
-
-#### 请求示例
-
-```bash
-POST /ai/analyze/product
-Content-Type: application/json
-
-{
-  "sku": "8WZ01CM1"
-}
-```
-
-#### 响应示例
-
-```json
-{
-  "core_selling_points": [
-    "适配多场景穿搭",
-    "舒适包裹，久穿不累",
-    "时尚设计，提升气质"
-  ],
-  "style_tags": [
-    "百搭",
-    "时尚"
-  ],
-  "scene_suggestion": [
-    "通勤",
-    "逛街",
-    "约会"
-  ],
-  "suitable_people": [
-    "上班族",
-    "年轻女性"
-  ],
-  "pain_points_solved": [
-    "久走不累"
-  ]
-}
-```
-
-#### 工作原理
-
-1. **接收请求**: API 层接收 SKU 参数
-2. **查询商品**: 从数据库查询商品信息
-3. **规则分析**: 基于 `product.tags` 和 `product.attributes` 应用规则逻辑
-4. **生成结果**: 推导出核心卖点、风格标签、适用场景、适合人群、解决痛点
-5. **返回结果**: 返回结构化的 JSON 响应
-
-#### 规则示例
-
-- **标签 "百搭"** → 添加 "适配多场景穿搭" 到 `core_selling_points`
-- **标签 "软底" 或 "舒适"** → 添加 "久走不累" 到 `pain_points_solved`
-- **属性 scene="通勤"** → 添加到 `scene_suggestion`
-- **属性 season="四季"** → 添加 "通勤"、"逛街"、"约会" 到 `scene_suggestion`
-
-详细规则说明请参考 [商品分析接口文档](docs/product_analyze_api.md)。
-
-#### 使用示例
-
-**Python**:
-```python
-import requests
-
-response = requests.post(
-    "http://127.0.0.1:8000/ai/analyze/product",
-    json={"sku": "8WZ01CM1"}
-)
-
-result = response.json()
-print("核心卖点:", result["core_selling_points"])
-print("风格标签:", result["style_tags"])
-```
-
-**cURL**:
-```bash
-curl -X POST "http://127.0.0.1:8000/ai/analyze/product" \
-  -H "Content-Type: application/json" \
-  -d '{"sku": "8WZ01CM1"}'
-```
-
----
-
-## 数据库说明
-
-### 表结构
-
-项目包含以下主要数据表：
-
-1. **products** - 商品信息表
-   - 存储商品 SKU、名称、价格、标签、属性等
-
-2. **guides** - 导购信息表
-   - 存储导购 ID、姓名、门店、级别等
-
-3. **user_behavior_logs** - 用户行为日志表
-   - 记录用户浏览、收藏、分享等行为
-
-4. **ai_task_log** - AI 任务日志表
-   - 记录所有 AI 接口调用，包括输入、输出、耗时等
-
-### 导入数据
-
-#### 方法 1: 命令行导入
-
-```bash
-# 导入表结构
-mysql -u root -p belle_ai < sql/schema.sql
-
-# 导入种子数据
-mysql -u root -p belle_ai < sql/seed_data.sql
-```
-
-#### 方法 2: MySQL 客户端工具
-
-1. 打开 Navicat、DBeaver 等工具
-2. 连接到 MySQL 数据库
-3. 选择 `belle_ai` 数据库
-4. 执行 `sql/schema.sql` 创建表
-5. 执行 `sql/seed_data.sql` 导入数据
-
-#### 方法 3: Python 脚本生成数据
-
-如果需要重新生成种子数据：
-
-```bash
-python generate_seed_data.py
-```
-
-这会生成包含 100 个商品、50 个导购、1000+ 条行为日志的完整数据。
-
----
-
-## 配置说明
-
-### 环境变量
-
-项目使用 `.env` 文件管理配置，参考 `.env.example` 创建：
-
-```bash
 # 数据库配置
-DATABASE_URL=mysql+pymysql://root:password@localhost:3306/belle_ai?charset=utf8mb4
+DATABASE_URL=mysql+pymysql://user:password@localhost:3306/belle_ai
 
 # Redis 配置（可选）
 REDIS_URL=redis://localhost:6379/0
 
 # LLM 配置
-LLM_API_KEY=your_api_key_here
-LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
-LLM_MODEL=qwen-max
+LLM_API_KEY=your_api_key
+LLM_BASE_URL=https://api.example.com/v1
+LLM_MODEL_NAME=qwen3-max
 
-# 应用配置
-APP_NAME=AI Smart Guide Service
-APP_VERSION=1.0.0
-APP_ENV=dev
-LOG_LEVEL=info
+# 嵌入模型配置（V2+）
+EMBEDDING_API_KEY=your_embedding_api_key
+EMBEDDING_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings
+EMBEDDING_MODEL=text-embedding-v2
+
+# 调试模式（可选）
+DEBUG=false
 ```
 
-### 配置项说明
+### 4. 初始化数据库
 
-| 配置项 | 说明 | 必填 |
-|--------|------|------|
-| DATABASE_URL | MySQL 数据库连接字符串 | 是 |
-| REDIS_URL | Redis 连接字符串（V2+） | 否 |
-| LLM_API_KEY | LLM API 密钥 | 否（使用 mock 模式） |
-| LLM_BASE_URL | LLM API 基础 URL | 否 |
-| LLM_MODEL | 使用的模型名称 | 否 |
+```bash
+# 创建数据库表
+mysql -u root -p < sql/schema.sql
+
+# 导入种子数据
+mysql -u root -p < sql/seed_data.sql
+```
+
+### 5. 初始化向量索引（V2+）
+
+```bash
+# 从数据库构建向量索引
+python app/db/init_vector_store.py
+```
+
+### 6. 启动服务
+
+```bash
+# 使用 uvicorn 启动
+uvicorn app.main:app --reload
+
+# 或使用 Python 直接运行
+python -m uvicorn app.main:app --reload
+```
+
+服务将在 `http://127.0.0.1:8000` 启动。
+
+---
+
+## API 文档
+
+### 在线文档
+
+启动服务后，访问以下地址查看 API 文档：
+
+- **Swagger UI**: http://127.0.0.1:8000/docs
+- **ReDoc**: http://127.0.0.1:8000/redoc
+
+### 主要 API 端点
+
+#### V1 API
+
+- `POST /ai/generate/copy` - 生成朋友圈文案（流式）
+- `POST /ai/analyze/product` - 分析商品卖点
+
+#### V2 API
+
+- `POST /ai/vector/search` - 向量语义搜索
+- `GET /ai/vector/stats` - 向量索引统计
+- `POST /admin/rag/preview` - RAG 调试预览（仅 DEBUG 模式）
+
+#### V3 API
+
+- `POST /ai/analyze/intent` - 分析用户购买意图
+- `POST /ai/followup/suggest` - 生成跟进建议
+
+#### V4 API
+
+- `POST /ai/sales/graph` - 执行销售流程图
+- `GET /ai/sales/graph/health` - 销售图健康检查
+- `POST /ai/agent/sales_flow` ⭐ - **AI 智能销售 Agent（推荐使用）**
+
+### 详细文档
+
+- [商品分析 API](./docs/product_analyze_api.md)
+- [向量搜索 API](./docs/vector_search_api.md)
+- [意图分析 API](./docs/intent_analysis_api.md)
+- [跟进建议 API](./docs/followup_api.md)
+- [销售流程图 API](./docs/sales_graph_api.md)
+- [AI 智能销售 Agent API](./docs/agent_sales_flow_api.md) ⭐
+
+---
+
+## 使用示例
+
+### 1. 生成朋友圈文案（V1）
+
+```bash
+curl -X POST "http://127.0.0.1:8000/ai/generate/copy" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sku": "8WZ01CM1",
+    "style": "natural"
+  }'
+```
+
+### 2. 分析商品卖点（V1）
+
+```bash
+curl -X POST "http://127.0.0.1:8000/ai/analyze/product" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sku": "8WZ01CM1"
+  }'
+```
+
+### 3. 向量语义搜索（V2）
+
+```bash
+curl -X POST "http://127.0.0.1:8000/ai/vector/search" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "舒适的运动鞋",
+    "top_k": 5
+  }'
+```
+
+### 4. 分析用户意图（V3）
+
+```bash
+curl -X POST "http://127.0.0.1:8000/ai/analyze/intent" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "user_001",
+    "sku": "8WZ01CM1",
+    "limit": 50
+  }'
+```
+
+### 5. AI 智能销售 Agent（V4）⭐ **推荐**
+
+```bash
+curl -X POST "http://127.0.0.1:8000/ai/agent/sales_flow" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "user_001",
+    "guide_id": "guide_001",
+    "sku": "8WZ01CM1"
+  }'
+```
+
+**响应示例**：
+
+```json
+{
+  "success": true,
+  "message": "Agent sales flow executed successfully",
+  "data": {
+    "user_id": "user_001",
+    "sku": "8WZ01CM1",
+    "product": {
+      "name": "跑鞋女2024新款舒适",
+      "price": 398.0,
+      "tags": ["舒适", "轻便", "透气"]
+    },
+    "behavior_summary": {
+      "visit_count": 2,
+      "max_stay_seconds": 25,
+      "has_enter_buy_page": true
+    },
+    "intent": {
+      "level": "high",
+      "reason": "用户已进入购买页面，这是强烈的购买信号。"
+    },
+    "allowed": true,
+    "rag_used": true,
+    "messages": [
+      {
+        "role": "assistant",
+        "content": "这是一款舒适的跑鞋，采用网面材质，透气轻便..."
+      }
+    ],
+    "plan_executed": [
+      "fetch_product",
+      "fetch_behavior_summary",
+      "classify_intent",
+      "anti_disturb_check",
+      "retrieve_rag",
+      "generate_copy"
+    ]
+  }
+}
+```
+
+---
+
+## V4 Agent 系统架构
+
+### 核心组件
+
+1. **AgentContext**: 统一上下文管理
+   - 存储用户信息、商品信息、行为摘要、意图级别等
+   - 维护消息历史和额外数据
+
+2. **Planner Agent**: 智能任务规划
+   - 根据上下文动态生成执行计划
+   - 支持条件跳过和优化
+
+3. **Tools**: 可复用的工具函数
+   - ProductTool: 获取商品
+   - BehaviorTool: 获取行为摘要
+   - RAGTool: 检索上下文
+   - CopyTool: 生成文案
+
+4. **Workers**: 独立的工作节点
+   - IntentAgent: 意图分类
+   - CopyAgent: 文案生成
+   - SalesAgent: 反打扰检查
+
+5. **LangGraph**: 状态机编排
+   - 定义完整的执行流程
+   - 支持条件路由和提前结束
+
+### 执行流程
+
+```
+初始化 Context
+  ↓
+Planner 生成计划
+  ↓
+LangGraph 执行流程
+  ├─ fetch_product
+  ├─ fetch_behavior_summary
+  ├─ classify_intent
+  ├─ anti_disturb_check
+  │   ├─ 拒绝 → END
+  │   └─ 允许 → 继续
+  ├─ retrieve_rag (可选)
+  └─ generate_copy
+  ↓
+返回完整结果
+```
 
 ---
 
 ## 开发指南
 
-### 项目架构
+### 添加新的 Agent 工具
 
-项目采用分层架构：
+1. 在 `app/agents/tools/` 创建工具文件
+2. 实现工具函数：`async def tool_name(context, **kwargs) -> AgentContext`
+3. 在 `app/agents/tools/__init__.py` 导出
+4. 在 Planner 或 Graph 中使用
 
-```
-API 层 (app/api/)
-    ↓
-Service 层 (app/services/)
-    ↓
-Repository 层 (app/repositories/)
-    ↓
-Model 层 (app/models/)
-    ↓
-Database (MySQL)
-```
+### 添加新的 Worker Agent
 
-### 添加新接口
+1. 在 `app/agents/workers/` 创建节点文件
+2. 实现节点函数：`async def node_name(context, **kwargs) -> AgentContext`
+3. 在 `app/agents/workers/__init__.py` 导出
+4. 在 Planner 或 Graph 中注册
 
-1. 在 `app/schemas/` 中定义请求/响应模型
-2. 在 `app/api/v1/` 中创建路由
-3. 在 `app/services/` 中实现业务逻辑
-4. 在 `app/repositories/` 中实现数据访问（如需要）
-5. 在 `app/main.py` 中注册路由
+### 修改执行流程
 
-### 日志说明
-
-项目使用 Python 标准 `logging` 模块，日志前缀说明：
-
-- `[API]` - API 端点层
-- `[SERVICE]` - 服务层
-- `[REPOSITORY]` - 数据访问层
-- `[GENERATOR]` - 生成器层
-- `[LOG_SERVICE]` - 日志服务层
+1. 修改 `app/agents/planner_agent.py` 调整规划逻辑
+2. 修改 `app/agents/graph/sales_graph.py` 调整图结构
+3. 更新相关文档
 
 ---
 
 ## 测试
 
+### 运行测试脚本
+
+```bash
+# 测试向量搜索
+python test_vector_search.py
+
+# 测试意图分析
+python test_intent_engine.py
+
+# 测试跟进建议
+python test_followup_service.py
+
+# 测试 Agent 系统
+python test_agent_framework.py
+python test_agent_tools.py
+python test_planner_agent.py
+python test_worker_agents.py
+python test_sales_graph.py
+```
+
+---
+
+## 监控和日志
+
 ### 健康检查
 
 ```bash
+# 服务健康检查
 curl http://127.0.0.1:8000/health
+
+# 销售图健康检查
+curl http://127.0.0.1:8000/ai/sales/graph/health
 ```
 
-### 测试文案生成
+### 日志
 
-```bash
-curl -X POST "http://127.0.0.1:8000/ai/generate/copy" \
-  -H "Content-Type: application/json" \
-  -d '{"sku": "8WZ01CM1", "style": "natural"}'
-```
-
-### 测试商品分析
-
-```bash
-curl -X POST "http://127.0.0.1:8000/ai/analyze/product" \
-  -H "Content-Type: application/json" \
-  -d '{"sku": "8WZ01CM1"}'
-```
+所有日志输出到控制台，包括：
+- API 请求日志
+- Agent 执行日志
+- 数据库操作日志
+- LLM 调用日志
 
 ---
 
-## 文档
+## 版本历史
 
-- [产品需求文档 (PRD)](docs/PRD.md)
-- [架构文档](docs/Architecture.md)
-- [商品分析接口文档](docs/product_analyze_api.md)
-- [Tags 查询说明](docs/tags_query_explanation.md)
-
----
-
-## 版本规划
-
-### V1 (当前版本)
-- ✅ 商品文案生成（流式 SSE）
-- ✅ 商品分析（规则驱动）
-- ✅ 数据库表结构和种子数据
-- ✅ AI 任务日志记录
-
-### V2 (计划中)
-- 🔲 RAG 向量检索（FAISS）
-- 🔲 更丰富的商品理解
-- 🔲 Redis 缓存
-
-### V3 (计划中)
-- 🔲 用户行为分析
-- 🔲 智能跟进建议
-- 🔲 防打扰机制
+- **v4.0.4**: AI 智能销售 Agent API（V4 最终产物）
+- **v4.0.3**: LangGraph 销售流程图和 API
+- **v4.0.2**: Worker Agent 节点
+- **v4.0.1**: Agent 工具层和规划器
+- **v4.0.0**: 核心 Agent 框架
+- **v3.0.0**: 用户行为分析和跟进建议
+- **v2.0.2**: RAG 知识库和向量搜索
+- **v1.0.0**: 基础文案生成和商品分析
 
 ---
 
-## 常见问题
+## 贡献指南
 
-### Q: 如何修改数据库连接？
-
-A: 编辑 `.env` 文件中的 `DATABASE_URL` 配置项。
-
-### Q: 如何查看 API 文档？
-
-A: 启动服务后访问 http://127.0.0.1:8000/docs
-
-### Q: 如何添加新的规则逻辑？
-
-A: 编辑 `app/services/product_service.py` 中的 `analyze_product` 函数。
-
-### Q: 如何切换 LLM 提供商？
-
-A: 修改 `.env` 中的 `LLM_BASE_URL` 和 `LLM_API_KEY`，确保使用 OpenAI 兼容的 API。
+1. Fork 项目
+2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 开启 Pull Request
 
 ---
 
 ## 许可证
 
-本项目为内部项目，版权归公司所有。
+本项目采用 MIT 许可证。
 
 ---
 
 ## 联系方式
 
-如有问题，请联系开发团队。
+如有问题或建议，请提交 Issue 或联系项目维护者。
+
+---
+
+**最后更新**: 2025-12-04  
+**当前版本**: v4.0.4
