@@ -7,3 +7,4 @@ pydantic-settings
 httpx
 faiss-cpu
 numpy
+langgraph>=0.2.0
