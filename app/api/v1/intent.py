@@ -25,27 +25,28 @@ async def analyze_intent(
     request: IntentAnalysisRequest,
     db: Session = Depends(get_db),
 ) -> IntentAnalysisResponse:
+    
+    
     """
-    Analyze user purchase intent based on behavior logs.
+    分析用户购买意图。
     
-    This endpoint retrieves user behavior logs for a specific product and
-    uses the intent analysis engine to classify the user's purchase intention.
+    本接口根据用户行为日志分析用户的购买意图，使用意图分析引擎对用户的购买意图进行分类。
     
-    **V3 Feature**: User behavior analysis and intent classification.
+    **V3 功能特性**：用户行为分析和意图分类。
     
-    Args:
-        request: Intent analysis request containing user_id, sku, and limit
-        db: Database session
+    参数说明:
+        request: 意图分析请求，包含 user_id、sku 和 limit
+        db: 数据库会话
         
-    Returns:
-        IntentAnalysisResponse with intent level, reason, and behavior summary
+    返回值:
+        IntentAnalysisResponse，包含意图级别、原因说明和行为摘要
         
-    Raises:
+    异常:
         HTTPException:
-            - 404 if user_id or sku not found (no behavior logs)
-            - 500 if analysis fails
+            - 404: 如果 user_id 或 sku 未找到（无行为日志）
+            - 500: 如果分析失败
             
-    Example Request:
+    请求示例:
         ```json
         {
             "user_id": "user_001",
@@ -54,7 +55,7 @@ async def analyze_intent(
         }
         ```
         
-    Example Response:
+    响应示例:
         ```json
         {
             "user_id": "user_001",

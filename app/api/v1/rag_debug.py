@@ -17,34 +17,34 @@ router = APIRouter(prefix="/admin", tags=["admin", "rag-debug"])
 
 
 class RAGPreviewRequest(BaseModel):
-    """Request model for RAG preview endpoint."""
+    """RAG 预览端点的请求模型。"""
 
-    query: str = Field(..., description="Search query text", min_length=1)
-    top_k: int = Field(5, description="Number of top results to return", ge=1, le=20)
+    query: str = Field(..., description="搜索查询文本", min_length=1)
+    top_k: int = Field(5, description="返回的 top 结果数量", ge=1, le=20)
     include_processed: bool = Field(
         False,
-        description="Whether to include processed results (with business logic) for comparison",
+        description="是否包含处理后的结果（包含业务逻辑）用于对比",
     )
 
 
 class RAGPreviewChunk(BaseModel):
-    """Model for a retrieved chunk with score."""
+    """检索到的文本块及其分数的模型。"""
 
-    chunk: str = Field(..., description="Retrieved text chunk")
-    score: float = Field(..., description="Similarity score (L2 distance, lower is better)")
-    rank: int = Field(..., description="Rank of this result (1-based)")
+    chunk: str = Field(..., description="检索到的文本块")
+    score: float = Field(..., description="相似度分数（L2 距离，越小越好）")
+    rank: int = Field(..., description="结果排名（从 1 开始）")
 
 
 class RAGPreviewResponse(BaseResponse[dict]):
-    """Response model for RAG preview endpoint."""
+    """RAG 预览端点的响应模型。"""
 
 
 def check_debug_mode() -> None:
     """
-    Dependency to check if debug mode is enabled.
+    检查调试模式是否启用的依赖函数。
     
-    Raises:
-        HTTPException: If debug mode is not enabled
+    异常:
+        HTTPException: 如果调试模式未启用
     """
     settings = get_settings()
     if not settings.debug:
@@ -61,26 +61,26 @@ async def rag_preview(
     _debug_check: None = Depends(check_debug_mode),
 ) -> RAGPreviewResponse:
     """
-    Preview RAG retrieval results for debugging.
+    预览 RAG 检索结果（用于调试）。
     
-    This endpoint allows developers to test and debug RAG retrieval by:
-    - Testing different queries
-    - Viewing similarity scores
-    - Inspecting retrieved chunks
+    本接口允许开发者测试和调试 RAG 检索功能：
+    - 测试不同的查询
+    - 查看相似度分数
+    - 检查检索到的文本块
     
-    **Only available when DEBUG=true in environment variables.**
+    **仅在环境变量 DEBUG=true 时可用。**
     
-    Args:
-        request: Preview request with query and top_k
-        _debug_check: Dependency to verify debug mode is enabled
+    参数说明:
+        request: 预览请求，包含 query 和 top_k
+        _debug_check: 用于验证调试模式是否启用的依赖
     
-    Returns:
-        RAGPreviewResponse with retrieved chunks and scores
+    返回值:
+        RAGPreviewResponse，包含检索到的文本块和分数
     
-    Raises:
+    异常:
         HTTPException: 
-            - 403 if DEBUG mode is not enabled
-            - 503 if vector store is not loaded
+            - 403: 如果 DEBUG 模式未启用
+            - 503: 如果向量存储未加载
     """
     logger.info("=" * 80)
     logger.info("[RAG_DEBUG] POST /admin/rag/preview - Request received")

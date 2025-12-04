@@ -37,14 +37,14 @@ async def execute_sales_graph(
     
     流程会根据用户意图和反打扰规则自动决定执行路径。
     
-    Args:
+    参数说明:
         request: 销售图执行请求
         db: 数据库会话
         
-    Returns:
+    返回值:
         SalesGraphResponse: 执行结果，包含意图级别、生成的文案等信息
         
-    Example:
+    请求示例:
         ```json
         {
             "user_id": "user_001",

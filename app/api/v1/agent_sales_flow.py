@@ -44,17 +44,17 @@ async def execute_agent_sales_flow(
     3. 执行 LangGraph 销售流程图
     4. 返回最终结果摘要
     
-    Args:
+    参数说明:
         request: Agent 销售流程请求
         db: 数据库会话
         
-    Returns:
+    返回值:
         AgentSalesFlowResponse: 包含商品信息、行为摘要、意图、消息等完整结果
         
-    Raises:
+    异常:
         HTTPException: 如果执行失败
         
-    Example Request:
+    请求示例:
         ```json
         {
             "user_id": "user_001",
@@ -63,7 +63,7 @@ async def execute_agent_sales_flow(
         }
         ```
         
-    Example Response:
+    响应示例:
         ```json
         {
             "success": true,

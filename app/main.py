@@ -26,7 +26,64 @@ settings = get_settings()
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    description="AI Smart Guide Service - Intelligent sales assistant for retail",
+    description="""
+    AI Smart Guide Service - 智能导购服务
+    
+    为鞋类零售行业提供 AI 驱动的销售助手服务。
+    
+    ## 功能特性
+    
+    ### V1 功能
+    - 商品文案生成（流式 SSE）
+    - 商品分析（规则驱动）
+    
+    ### V2 功能
+    - 向量语义搜索
+    - RAG 知识库
+    - RAG 调试端点
+    
+    ### V3 功能
+    - 用户行为分析
+    - 意图分析
+    - 跟进建议
+    
+    ### V4 功能（AI Agent 系统）
+    - 核心 Agent 框架
+    - Agent 工具层
+    - Planner Agent
+    - Worker Agents
+    - LangGraph 状态机
+    - **AI 智能销售 Agent API** ⭐（推荐使用）
+    
+    ## 主要 API
+    
+    - `POST /ai/agent/sales_flow` - AI 智能销售 Agent（V4 最终产物，推荐）
+    - `POST /ai/generate/copy` - 生成朋友圈文案（流式）
+    - `POST /ai/analyze/product` - 分析商品卖点
+    - `POST /ai/vector/search` - 向量语义搜索
+    - `POST /ai/analyze/intent` - 分析用户购买意图
+    - `POST /ai/followup/suggest` - 生成跟进建议
+    - `POST /ai/sales/graph` - 执行销售流程图
+    
+    详细文档请参考：https://github.com/potaly/belle_ai
+    """,
+    contact={
+        "name": "AI Smart Guide Service",
+        "url": "https://github.com/potaly/belle_ai",
+    },
+    license_info={
+        "name": "MIT",
+    },
+    tags_metadata=[
+        {
+            "name": "ai",
+            "description": "AI 相关接口，包括文案生成、商品分析、向量搜索、意图分析、跟进建议、Agent 系统等",
+        },
+        {
+            "name": "agent",
+            "description": "AI Agent 系统接口，包括销售流程图和智能销售 Agent",
+        },
+    ],
 )
 
 # Include routers

@@ -24,26 +24,25 @@ async def suggest_followup(
     db: Session = Depends(get_db),
 ) -> FollowupResponse:
     """
-    Generate personalized follow-up suggestion based on user intent and behavior.
+    生成个性化跟进建议。
     
-    This endpoint analyzes user behavior logs, classifies purchase intent, and
-    generates a personalized follow-up message with suggested action.
+    本接口分析用户行为日志，分类购买意图，并生成个性化的跟进消息和建议动作。
     
-    **V3 Feature**: Intelligent follow-up suggestion with anti-disturb mechanism.
+    **V3 功能特性**：智能跟进建议，包含反打扰机制。
     
-    Args:
-        request: Follow-up suggestion request containing user_id, sku, and limit
-        db: Database session
+    参数说明:
+        request: 跟进建议请求，包含 user_id、sku 和 limit
+        db: 数据库会话
         
-    Returns:
-        FollowupResponse with suggested action and personalized message
+    返回值:
+        FollowupResponse，包含建议动作和个性化消息
         
-    Raises:
+    异常:
         HTTPException:
-            - 404 if product not found
-            - 500 if analysis fails
+            - 404: 如果商品未找到
+            - 500: 如果分析失败
             
-    Example Request:
+    请求示例:
         ```json
         {
             "user_id": "user_001",
@@ -52,7 +51,7 @@ async def suggest_followup(
         }
         ```
         
-    Example Response:
+    响应示例:
         ```json
         {
             "success": true,
