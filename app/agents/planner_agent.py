@@ -27,7 +27,14 @@ TASK_GENERATE_FOLLOWUP = "generate_followup"
 
 async def plan_sales_flow(context: AgentContext) -> List[str]:
     """
-    Plan the sales flow based on context and user intent.
+    基于上下文和用户意图规划销售流程。
+    
+    调用逻辑：
+    - 通常在 AgentRunner 执行计划前调用，由 PlannerAgent.plan() 内部调用
+    - 前提条件：context 至少需要 sku，可选 user_id、product、behavior_summary 等
+    - 调用场景：用户发起请求后，Agent 系统需要决定执行哪些任务时
+    - 调用后：返回任务列表，由 AgentRunner.execute_plan() 按序执行
+    - 规划策略：基于规则（rule_based），根据上下文状态动态决定任务顺序和是否跳过
     
     This planner uses rule-based logic to determine which tasks should be
     executed and in what order. It considers:
@@ -59,14 +66,16 @@ async def plan_sales_flow(context: AgentContext) -> List[str]:
     
     plan: List[str] = []
     
-    # Step 1: Always fetch product first (if not already loaded)
+    # 核心规划逻辑：按依赖关系顺序添加任务，跳过已完成的步骤
+    
+    # 步骤1：加载商品信息（必需，后续步骤依赖）
     if not context.product:
         plan.append(TASK_FETCH_PRODUCT)
         logger.debug("[PLANNER] Added: fetch_product (required)")
     else:
         logger.debug("[PLANNER] Skipped: fetch_product (already loaded)")
     
-    # Step 2: Fetch behavior summary (if user_id and sku are available)
+    # 步骤2：获取行为摘要（需要 user_id 和 sku）
     if context.user_id and context.sku and not context.behavior_summary:
         plan.append(TASK_FETCH_BEHAVIOR_SUMMARY)
         logger.debug("[PLANNER] Added: fetch_behavior_summary (user data available)")
@@ -75,7 +84,7 @@ async def plan_sales_flow(context: AgentContext) -> List[str]:
     else:
         logger.debug("[PLANNER] Skipped: fetch_behavior_summary (already loaded)")
     
-    # Step 3: Classify intent (if behavior summary is available)
+    # 步骤3：分类意图（依赖行为摘要）
     if context.behavior_summary and not context.intent_level:
         plan.append(TASK_CLASSIFY_INTENT)
         logger.debug("[PLANNER] Added: classify_intent (behavior summary available)")
@@ -84,15 +93,13 @@ async def plan_sales_flow(context: AgentContext) -> List[str]:
     else:
         logger.debug("[PLANNER] Skipped: classify_intent (already classified)")
     
-    # Step 4: Anti-disturb check (if intent is classified)
-    # This checks if we should proceed with active engagement
+    # 步骤4：反打扰检查（基于意图级别判断是否允许主动接触）
     intent_level = context.intent_level
     if not intent_level and context.behavior_summary:
-        # Try to classify intent on the fly for planning
+        # 如果意图未分类但有行为数据，尝试预分类用于规划
         try:
             _, _ = classify_intent(context.behavior_summary)
-            # We'll check intent after classification
-            intent_level = None  # Will be set after classify_intent node
+            intent_level = None  # 将在 classify_intent 节点执行后设置
         except Exception:
             pass
     
@@ -102,8 +109,7 @@ async def plan_sales_flow(context: AgentContext) -> List[str]:
     else:
         logger.debug("[PLANNER] Skipped: anti_disturb_check (no intent/behavior)")
     
-    # Step 5: Retrieve RAG context (conditional based on intent)
-    # Rule: Skip RAG if intent is low (user not interested)
+    # 步骤5：检索 RAG 上下文（条件：低意图跳过，避免无效检索）
     should_retrieve_rag = _should_retrieve_rag(context, intent_level)
     if should_retrieve_rag:
         plan.append(TASK_RETRIEVE_RAG)
@@ -114,11 +120,10 @@ async def plan_sales_flow(context: AgentContext) -> List[str]:
             f"(intent_level={intent_level}, low intent detected)"
         )
     
-    # Step 6: Generate copy or followup (conditional based on anti-disturb)
-    # This will be determined by anti_disturb_check node, but we can pre-plan
+    # 步骤6：生成内容（文案或跟进话术，受反打扰机制控制）
     should_generate_content = _should_generate_content(context, intent_level)
     if should_generate_content:
-        # Determine if we should generate copy or followup
+        # 根据任务类型选择生成文案或跟进话术
         if context.extra.get("task_type") == "followup":
             plan.append(TASK_GENERATE_FOLLOWUP)
             logger.debug("[PLANNER] Added: generate_followup (task type specified)")
@@ -140,9 +145,9 @@ async def plan_sales_flow(context: AgentContext) -> List[str]:
 
 def _should_retrieve_rag(context: AgentContext, intent_level: Optional[str]) -> bool:
     """
-    Determine if RAG retrieval should be performed.
+    判断是否应该检索 RAG 上下文。
     
-    Rule: Skip RAG if intent is low (user not interested enough).
+    核心规则：低意图用户跳过 RAG（避免无效检索，节省资源）
     
     Args:
         context: Agent context
@@ -151,7 +156,7 @@ def _should_retrieve_rag(context: AgentContext, intent_level: Optional[str]) -> 
     Returns:
         True if RAG should be retrieved, False otherwise
     """
-    # If intent is explicitly low, skip RAG
+    # 低意图用户跳过 RAG 检索
     if intent_level == INTENT_LOW:
         return False
     
@@ -174,9 +179,9 @@ def _should_generate_content(
     intent_level: Optional[str],
 ) -> bool:
     """
-    Determine if content generation (copy/followup) should be performed.
+    判断是否应该生成内容（文案或跟进话术）。
     
-    Rule: Skip if anti-disturb mechanism blocks it or intent is very low.
+    核心规则：反打扰机制阻止时跳过；低意图用户默认跳过（除非强制生成）
     
     Args:
         context: Agent context
@@ -185,14 +190,12 @@ def _should_generate_content(
     Returns:
         True if content should be generated, False otherwise
     """
-    # Check if anti-disturb flag is already set
+    # 反打扰机制已阻止，跳过内容生成
     if context.extra.get("anti_disturb_blocked", False):
         return False
     
-    # If intent is explicitly low, be more conservative
-    # (but still allow if explicitly requested)
+    # 低意图用户默认跳过，除非明确要求生成
     if intent_level == INTENT_LOW:
-        # Allow only if explicitly requested (e.g., task_type in extra)
         return context.extra.get("force_generate", False)
     
     # Default: allow content generation

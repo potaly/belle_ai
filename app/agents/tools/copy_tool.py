@@ -18,7 +18,14 @@ async def generate_marketing_copy(
     **kwargs: Any,
 ) -> AgentContext:
     """
-    Generate marketing copy using LLM and add it to context messages.
+    生成营销文案并添加到上下文消息。
+    
+    调用逻辑：
+    - 通常在 retrieve_rag 之后执行（generate_copy），作为流程的最后一步
+    - 前提条件：context.product 必须已设置（必需），context.rag_chunks 可选（用于增强）
+    - 调用场景：规划器在反打扰检查通过后才会添加此任务
+    - 调用后：生成的文案添加到 context.messages，可通过 context.get_latest() 获取
+    - 依赖关系：依赖商品信息和 RAG 上下文（如果有）来生成高质量文案
     
     This tool uses prompt_builder to construct a prompt, calls llm_client.stream_chat
     to generate copy, and updates context.messages with the generated text.
@@ -57,7 +64,7 @@ async def generate_marketing_copy(
         return context
     
     try:
-        # Build prompt using PromptBuilder
+        # 核心逻辑：构建 prompt（包含商品信息、RAG上下文、风格要求）
         prompt_builder = PromptBuilder()
         prompt = prompt_builder.build_copy_prompt(
             product=context.product,
@@ -67,15 +74,15 @@ async def generate_marketing_copy(
         
         logger.info(f"[COPY_TOOL] Prompt built: {len(prompt)} chars")
         
-        # Get LLM client
+        # 调用流式 LLM 生成文案
         llm_client = get_llm_client()
         system_prompt = "你是一个专业的鞋类销售文案写手，擅长写吸引人的朋友圈文案。"
         
-        # Generate copy using streaming LLM
         logger.info("[COPY_TOOL] Calling LLM to generate copy...")
         full_response = ""
         
         try:
+            # 流式接收 LLM 响应，拼接完整文案
             async for chunk in llm_client.stream_chat(
                 prompt,
                 system=system_prompt,
@@ -86,16 +93,15 @@ async def generate_marketing_copy(
                     full_response += chunk
         except LLMClientError as e:
             logger.error(f"[COPY_TOOL] ✗ LLM streaming failed: {e}")
-            # Fallback message
+            # LLM 失败时使用降级消息
             full_response = "抱歉，文案生成失败，请稍后重试。"
         
-        # Clean up response
+        # 清理并验证响应
         full_response = full_response.strip()
-        
         if not full_response:
             full_response = "抱歉，未能生成文案内容。"
         
-        # Add generated copy to context messages
+        # 将生成的文案添加到上下文消息中
         context.add_message("assistant", full_response)
         
         logger.info(

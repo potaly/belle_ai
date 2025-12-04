@@ -14,7 +14,9 @@ logger = logging.getLogger(__name__)
 
 def summarize_behavior(logs: list) -> dict:
     """
-    Summarize behavior logs into a summary dictionary.
+    将用户行为日志汇总为摘要字典。
+    
+    核心逻辑：计算访问次数、停留时间统计、关键行为标志（进入购买页、收藏等）
     
     Args:
         logs: List of UserBehaviorLog instances
@@ -75,7 +77,14 @@ async def fetch_behavior_summary(
     **kwargs: Any,
 ) -> AgentContext:
     """
-    Fetch user behavior logs and summarize them into context.
+    获取用户行为摘要并添加到上下文。
+    
+    调用逻辑：
+    - 通常在 fetch_product 之后执行（fetch_behavior_summary）
+    - 前提条件：context.user_id 和 context.sku 必须已设置
+    - 调用场景：需要分析用户意图时，规划器会自动添加此任务
+    - 调用后：context.behavior_summary 被填充，供 classify_intent 使用
+    - 依赖关系：此工具的输出是意图分类的输入
     
     This tool reads user behavior logs from the database, summarizes them
     using summarize_behavior(), and saves the summary to context.behavior_summary.

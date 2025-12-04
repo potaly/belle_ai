@@ -20,7 +20,13 @@ async def fetch_product(
     **kwargs: Any,
 ) -> AgentContext:
     """
-    Fetch product information by SKU and add it to context.
+    获取商品信息并添加到上下文。
+    
+    调用逻辑：
+    - 通常在规划器生成的计划中作为第一步执行（fetch_product）
+    - 前提条件：context.sku 必须已设置
+    - 调用场景：AgentRunner 执行计划时，或手动调用以加载商品数据
+    - 调用后：context.product 被填充，后续工具（如 RAG、Copy）依赖此数据
     
     This tool loads a product from the database using the SKU from context,
     and updates context.product with the loaded product.

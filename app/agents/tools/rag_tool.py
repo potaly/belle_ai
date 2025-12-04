@@ -16,7 +16,14 @@ async def retrieve_rag(
     **kwargs: Any,
 ) -> AgentContext:
     """
-    Retrieve relevant RAG context for the product and add it to context.
+    检索 RAG 上下文并添加到上下文。
+    
+    调用逻辑：
+    - 通常在 classify_intent 和 anti_disturb_check 之后执行（retrieve_rag）
+    - 前提条件：context.product 应已设置（用于构建查询）
+    - 调用场景：规划器根据意图级别决定是否调用（低意图会跳过）
+    - 调用后：context.rag_chunks 被填充，供 generate_copy 使用以增强文案质量
+    - 条件判断：如果意图为 low，规划器会跳过此步骤以节省资源
     
     This tool calls rag_service.retrieve_context() to get relevant chunks
     based on product information, and saves them into context.rag_chunks.
