@@ -4,6 +4,7 @@ import logging
 from fastapi import FastAPI
 
 from app.api.v1 import (
+    agent_sales_flow as agent_sales_flow_router,
     copy as copy_router,
     followup as followup_router,
     intent as intent_router,
@@ -37,6 +38,7 @@ app.include_router(rag_debug_router.router)  # V2: RAG 调试端点（仅 DEBUG 
 app.include_router(intent_router.router)  # V3: 意图分析API
 app.include_router(followup_router.router)  # V3: 跟进建议API
 app.include_router(sales_graph_router.router)  # V4: 销售流程图API
+app.include_router(agent_sales_flow_router.router)  # V4: AI智能销售Agent API（最终产物）
 
 
 @app.get("/health")
