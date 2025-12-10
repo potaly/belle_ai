@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 
+
 @router.post("/sales/graph", response_model=SalesGraphResponse)
 async def execute_sales_graph(
     request: SalesGraphRequest,
@@ -85,6 +86,7 @@ async def execute_sales_graph(
         execution_time = time.time() - start_time
         
         # 构建响应数据
+        rag_used = len(result_context.rag_chunks) > 0
         response_data: dict[str, Any] = {
             "user_id": result_context.user_id,
             "sku": result_context.sku,
@@ -92,7 +94,9 @@ async def execute_sales_graph(
             "allowed": result_context.extra.get("allowed", False),
             "anti_disturb_blocked": result_context.extra.get("anti_disturb_blocked", False),
             "messages_count": len(result_context.messages),
+            "rag_used": rag_used,  # RAG 是否被使用（True/False）
             "rag_chunks_count": len(result_context.rag_chunks),
+            "rag_chunks": result_context.rag_chunks,  # 返回实际的 RAG chunks 内容
             "execution_time_seconds": round(execution_time, 3),
         }
         
@@ -121,8 +125,18 @@ async def execute_sales_graph(
             f"[API] ✓ Sales graph executed successfully in {execution_time:.3f}s. "
             f"Intent: {result_context.intent_level}, "
             f"Allowed: {result_context.extra.get('allowed')}, "
-            f"Messages: {len(result_context.messages)}"
+            f"Messages: {len(result_context.messages)}, "
+            f"RAG chunks: {len(result_context.rag_chunks)}"
         )
+        
+        # 记录 RAG 是否被使用
+        if result_context.rag_chunks:
+            logger.info(
+                f"[API] RAG chunks retrieved: {len(result_context.rag_chunks)} chunks. "
+                f"First chunk preview: {result_context.rag_chunks[0][:100]}..."
+            )
+        else:
+            logger.info("[API] No RAG chunks retrieved (may have been skipped due to low intent or RAG service unavailable)")
         logger.info("=" * 80)
         
         return SalesGraphResponse(

@@ -8,4 +8,5 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 
 @router.post("/generate/copy", response_model=CopyResponse)
 async def create_copy(payload: CopyRequest) -> CopyResponse:
+    
     return generate_copy(payload)

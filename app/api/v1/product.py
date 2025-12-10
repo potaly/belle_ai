@@ -23,20 +23,20 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 async def analyze_product_endpoint(
     request: ProductAnalysisRequest,
     db: Session = Depends(get_db),
-) -> ProductAnalysisResponse:
+) -> ProductAnalysisResponse:   
     """
-    Analyze product and return structured selling points.
-    
-    This endpoint uses rule-based logic to derive analysis from product tags and attributes.
-    
-    Args:
-        request: Product analysis request containing SKU
-        db: Database session
+    分析产品并返回结构化卖点。
+
+    本接口通过基于规则的逻辑，根据产品标签和属性生成产品分析结果。
+
+    参数说明:
+        request: 产品分析请求体，包含 SKU
+        db: 数据库会话
         
-    Returns:
-        ProductAnalysisResponse with core selling points, style tags, scene suggestions,
-        suitable people, and pain points solved
+    返回值:
+        ProductAnalysisResponse，包含核心卖点、风格标签、适用场景建议、适合人群、解决的痛点等
     """
+
     logger.info("=" * 80)
     logger.info("[API] POST /ai/analyze/product - Request received")
     logger.info(f"[API] Request parameters: sku={request.sku}")

@@ -76,6 +76,7 @@ async def plan_sales_flow(context: AgentContext) -> List[str]:
         logger.debug("[PLANNER] Skipped: fetch_product (already loaded)")
     
     # 步骤2：获取行为摘要（需要 user_id 和 sku）
+    
     if context.user_id and context.sku and not context.behavior_summary:
         plan.append(TASK_FETCH_BEHAVIOR_SUMMARY)
         logger.debug("[PLANNER] Added: fetch_behavior_summary (user data available)")
@@ -124,6 +125,7 @@ async def plan_sales_flow(context: AgentContext) -> List[str]:
     should_generate_content = _should_generate_content(context, intent_level)
     if should_generate_content:
         # 根据任务类型选择生成文案或跟进话术
+        
         if context.extra.get("task_type") == "followup":
             plan.append(TASK_GENERATE_FOLLOWUP)
             logger.debug("[PLANNER] Added: generate_followup (task type specified)")
@@ -159,7 +161,7 @@ def _should_retrieve_rag(context: AgentContext, intent_level: Optional[str]) -> 
     # 低意图用户跳过 RAG 检索
     if intent_level == INTENT_LOW:
         return False
-    
+    # 如果有行为摘要但意图未分类，则分类意图后再检索 RAG
     # If we have behavior summary but intent is not yet classified,
     # we'll classify it first, so allow RAG for now (will be refined later)
     if context.behavior_summary and not intent_level:
@@ -191,6 +193,9 @@ def _should_generate_content(
         True if content should be generated, False otherwise
     """
     # 反打扰机制已阻止，跳过内容生成
+    
+    # 这句的含义是：如果 anti_disturb_blocked 标志位为 True（即反打扰机制判断当前用户不应被打扰时），
+    # 就直接返回 False，表示不应该生成内容（如营销文案、消息等）。
     if context.extra.get("anti_disturb_blocked", False):
         return False
     
