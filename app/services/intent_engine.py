@@ -14,6 +14,11 @@ INTENT_HESITATING = "hesitating"
 
 
 def classify_intent(summary: Dict) -> Tuple[str, str]:
+    # 购买意图分析，根据行为汇总分层决策：
+    # 1. 如果用户明确表现出高购买兴趣（如进入购买页、收藏、停留时长长），判定为“高意图”
+    # 2. 若有多次访问、较长停留，但没有强信号，判为“中等意图”
+    # 3. 若仅有短暂访问，行为较为浅尝，则为“低意图”
+    # 4. 如果行为反复但犹豫不决（如频繁查看、偶有操作，但无关键动作），判为“犹豫/观望”
     """
     Classify user purchase intent based on behavior summary.
     

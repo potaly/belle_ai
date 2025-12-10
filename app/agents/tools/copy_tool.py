@@ -80,7 +80,8 @@ async def generate_marketing_copy(
         
         logger.info("[COPY_TOOL] Calling LLM to generate copy...")
         full_response = ""
-        
+        # INSERT_YOUR_CODE
+        logger.info(f"[COPY_TOOL] === [DEBUG] Prompt Sent to LLM ===\n{prompt}\n=== [END PROMPT] ===")
         try:
             # 流式接收 LLM 响应，拼接完整文案
             async for chunk in llm_client.stream_chat(

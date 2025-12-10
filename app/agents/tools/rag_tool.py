@@ -80,8 +80,31 @@ async def retrieve_rag(
         
         logger.info(f"[RAG_TOOL] Query: '{query}'")
         
-        # Retrieve context
-        chunks = rag_service.retrieve_context(query, top_k=top_k)
+        # Retrieve context (retrieve more to account for filtering)
+        # We retrieve more chunks because we'll filter out the current product
+        retrieve_count = top_k * 2 if context.sku else top_k
+        chunks = rag_service.retrieve_context(query, top_k=retrieve_count)
+        
+        # Filter out chunks that belong to the current product (by SKU)
+        # This prevents confusion from retrieving the same product's description
+        if context.sku:
+            filtered_chunks = []
+            current_sku_pattern = f"[SKU:{context.sku}]"
+            for chunk in chunks:
+                # Skip chunks that contain the current product's SKU
+                if current_sku_pattern not in chunk:
+                    filtered_chunks.append(chunk)
+                else:
+                    logger.debug(
+                        f"[RAG_TOOL] Filtered out chunk containing current SKU: {chunk[:50]}..."
+                    )
+            
+            # Take only top_k after filtering
+            chunks = filtered_chunks[:top_k]
+            logger.info(
+                f"[RAG_TOOL] After filtering current SKU: {len(chunks)} chunks "
+                f"(filtered {retrieve_count - len(chunks)} chunks)"
+            )
         
         # Update context
         context.rag_chunks = chunks

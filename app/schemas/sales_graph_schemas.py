@@ -19,6 +19,7 @@ class SalesGraphRequest(BaseModel):
 
 
 class SalesGraphResponse(BaseModel):
+    # 响应销售流程图执行的响应模型
     """Response schema for sales graph execution."""
 
     success: bool = Field(..., description="Whether execution succeeded")
@@ -36,7 +37,13 @@ class SalesGraphResponse(BaseModel):
                     "intent_level": "high",
                     "allowed": True,
                     "messages_count": 2,
+                    "rag_used": True,
                     "rag_chunks_count": 3,
+                    "rag_chunks": [
+                        "这是一款专为跑步设计的舒适跑鞋，采用透气网面材质...",
+                        "鞋底采用缓震科技，有效减少跑步时的冲击力...",
+                        "适合日常跑步和长距离训练，深受跑者喜爱..."
+                    ],
                     "plan_used": ["fetch_product", "fetch_behavior_summary", "classify_intent", "anti_disturb_check", "retrieve_rag", "generate_copy"],
                     "final_message": "这是一款舒适的跑鞋...",
                 },

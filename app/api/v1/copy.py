@@ -30,19 +30,20 @@ async def generate_copy(
     guide_id: str | None = None,
 ) -> StreamingResponse:
     """
-    Generate WeChat Moments copy for a product (streaming).
-    
-    This endpoint streams copy generation in real-time using Server-Sent Events (SSE).
-    The first chunk is emitted within 500ms.
-    
-    Args:
-        request: Copy generation request
-        db: Database session
-        guide_id: Guide ID (optional, can be extracted from headers/auth)
-        
-    Returns:
-        StreamingResponse with SSE format
+    生成产品朋友圈文案（流式 SSE）。
+
+    本接口通过 Server-Sent Events (SSE) 实时流式生成朋友圈文案。
+    第一个响应 chunk 会在 500ms 内返回。
+
+    参数说明:
+        request: 文案生成请求体
+        db: 数据库 session
+        guide_id: 导购员 ID（可选，可从 headers/auth 提取）
+
+    返回值:
+        支持 SSE 的 StreamingResponse
     """
+ 
     logger.info("=" * 80)
     logger.info("[API] POST /ai/generate/copy - Request received")
     logger.info(f"[API] Request parameters: sku={request.sku}, style={request.style.value}, guide_id={guide_id}")

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import List, Optional
 
 from app.models.product import Product
@@ -54,10 +55,24 @@ class PromptBuilder:
         prompt_parts = []
         
         # System context (RAG if available)
+        # Note: RAG context contains similar products for reference only
+        # The LLM should focus on the current product information below
         if rag_context:
-            prompt_parts.append("## 相关商品信息：")
+            prompt_parts.append("## 参考信息（相似商品，仅供参考，不要混淆）：")
+            prompt_parts.append("以下是一些相似商品的信息，仅作为参考，帮助你理解商品类型和特点。")
+            prompt_parts.append("**重要：请专注于下面'商品信息'部分的当前商品，不要使用参考信息中的价格、SKU等具体信息。**")
+            prompt_parts.append("")
             for i, chunk in enumerate(rag_context[:3], 1):
-                prompt_parts.append(f"{i}. {chunk}")
+                # Extract only useful parts (remove SKU and price to avoid confusion)
+                # Keep only descriptive information
+                cleaned_chunk = chunk
+                # Remove SKU markers to avoid confusion
+                cleaned_chunk = re.sub(r'\[SKU:[^\]]+\]', '', cleaned_chunk)
+                # Remove explicit price mentions if they're too specific
+                cleaned_chunk = re.sub(r'价格为\d+\.\d+元', '', cleaned_chunk)
+                cleaned_chunk = cleaned_chunk.strip()
+                if cleaned_chunk:
+                    prompt_parts.append(f"{i}. {cleaned_chunk}")
             prompt_parts.append("")
         
         # Product information
@@ -86,7 +101,7 @@ class PromptBuilder:
         prompt_parts.append("4. 语言自然流畅，符合朋友圈风格")
         prompt_parts.append("5. 突出商品的核心卖点和特色")
         if rag_context:
-            prompt_parts.append("6. 可以参考相关商品信息，但要突出当前商品的独特性")
+            prompt_parts.append("6. **重要**：参考信息仅用于理解商品类型，文案必须基于当前商品信息，不要使用参考信息中的价格、SKU等具体信息")
         prompt_parts.append("")
         prompt_parts.append("只输出文案内容，不要其他说明：")
         

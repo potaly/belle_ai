@@ -79,23 +79,35 @@ def _should_continue(state: GraphState) -> Literal["retrieve_rag", "generate_cop
     核心逻辑：
     - 如果反打扰检查通过（allowed=True），继续执行后续节点
     - 如果反打扰检查拒绝（allowed=False），提前结束流程
+    - 如果意图级别为 low，跳过 RAG 检索，直接生成文案
+    - 其他意图级别（high, medium, hesitating）会先检索 RAG，再生成文案
     """
     context = state["context"]
     allowed = context.extra.get("allowed", False)
+    intent_level = context.intent_level
+    
+    logger.info(
+        f"[SALES_GRAPH] Routing decision: allowed={allowed}, intent_level={intent_level}"
+    )
     
     if not allowed:
-        logger.info("[SALES_GRAPH] Anti-disturb check denied, ending early")
+        logger.info("[SALES_GRAPH] ✗ Anti-disturb check denied, ending early")
         return END
     
     # 检查是否需要检索 RAG
-    intent_level = context.intent_level
     if intent_level == "low":
         # 低意图跳过 RAG，直接生成文案
-        logger.info("[SALES_GRAPH] Low intent, skipping RAG, going to generate_copy")
+        logger.info(
+            "[SALES_GRAPH] → Low intent detected, skipping RAG retrieval, "
+            "going directly to generate_copy"
+        )
         return "generate_copy"
     
     # 其他情况：先检索 RAG，再生成文案
-    logger.info("[SALES_GRAPH] Proceeding to retrieve_rag")
+    logger.info(
+        f"[SALES_GRAPH] → Intent level '{intent_level}' requires RAG context, "
+        "proceeding to retrieve_rag"
+    )
     return "retrieve_rag"
 
 
@@ -236,7 +248,21 @@ async def run_sales_graph(
         logger.info("[SALES_GRAPH] Using full graph flow")
         # 使用完整的图流程
         graph = get_sales_graph()
-        
+        # 打印当前执行的销售流程图名称（用于调试和监控）
+        logger.info(f"[SALES_GRAPH] Compiled graph name: {graph.__class__.__name__}")
+        # INSERT_YOUR_CODE
+        # 获取所有需要执行的节点名并打印（调试用途）
+        try:
+            # 假设 graph.nodes 或 graph.get_nodes() 返回节点名或节点对象列表
+            node_names = getattr(graph, "nodes", None)
+            if node_names is None and hasattr(graph, "get_nodes"):
+                node_names = graph.get_nodes()
+            # 统一为名字（字符串）列表
+            if node_names is not None:
+                names = [n if isinstance(n, str) else getattr(n, "name", str(n)) for n in node_names]
+                logger.info(f"[SALES_GRAPH] Node execution order: {' -> '.join(names)}")
+        except Exception as e:
+            logger.warning(f"[SALES_GRAPH] Failed to print node names: {e}")
         # 初始化状态
         initial_state: GraphState = {"context": context}
         
