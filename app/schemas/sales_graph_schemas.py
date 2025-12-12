@@ -44,6 +44,14 @@ class SalesGraphResponse(BaseModel):
                         "鞋底采用缓震科技，有效减少跑步时的冲击力...",
                         "适合日常跑步和长距离训练，深受跑者喜爱..."
                     ],
+                    "rag_diagnostics": {
+                        "retrieved_count": 6,
+                        "filtered_count": 3,
+                        "safe_count": 3,
+                        "filter_reasons": [
+                            "Chunk contains foreign SKU(s): 8WZ76CM6 (prevent cross-SKU contamination)"
+                        ]
+                    },
                     "plan_used": ["fetch_product", "fetch_behavior_summary", "classify_intent", "anti_disturb_check", "retrieve_rag", "generate_copy"],
                     "decision_reason": "用户意图级别为 high：用户已进入购买页面，这是强烈的购买信号。；反打扰检查通过，允许主动接触",
                     "final_message": "这是一款舒适的跑鞋...",

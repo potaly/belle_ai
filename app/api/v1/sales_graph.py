@@ -112,6 +112,19 @@ async def execute_sales_graph(
             "execution_time_seconds": round(execution_time, 3),
         }
         
+        # Add RAG diagnostics (if available)
+        rag_diagnostics = result_context.extra.get("rag_diagnostics")
+        if rag_diagnostics:
+            response_data["rag_diagnostics"] = rag_diagnostics
+        else:
+            # Default diagnostics if not available
+            response_data["rag_diagnostics"] = {
+                "retrieved_count": len(result_context.rag_chunks),
+                "filtered_count": 0,
+                "safe_count": len(result_context.rag_chunks),
+                "filter_reasons": [],
+            }
+        
         # 添加计划信息（必须为 List[str]）
         if final_plan:
             response_data["plan_used"] = final_plan

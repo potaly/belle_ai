@@ -197,6 +197,19 @@ async def execute_agent_sales_flow(
         response_data["rag_used"] = rag_used
         response_data["rag_chunks_count"] = len(result_context.rag_chunks)
         
+        # Add RAG diagnostics (if available)
+        rag_diagnostics = result_context.extra.get("rag_diagnostics")
+        if rag_diagnostics:
+            response_data["rag_diagnostics"] = rag_diagnostics
+        else:
+            # Default diagnostics if not available
+            response_data["rag_diagnostics"] = {
+                "retrieved_count": len(result_context.rag_chunks),
+                "filtered_count": 0,
+                "safe_count": len(result_context.rag_chunks),
+                "filter_reasons": [],
+            }
+        
         # Add messages
         messages = [
             MessageItem(role=msg.get("role", "unknown"), content=msg.get("content", ""))

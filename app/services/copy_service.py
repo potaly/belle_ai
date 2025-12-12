@@ -57,9 +57,22 @@ def prepare_copy_generation(
             query_parts.extend(product.tags[:3])  # Use top 3 tags
         query = " ".join(query_parts)
         
-        rag_context = rag_service.retrieve_context(query, top_k=3)
+        # Retrieve context with strict SKU validation
+        rag_context, diagnostics = rag_service.retrieve_context(
+            query, top_k=3, current_sku=sku
+        )
         rag_used = len(rag_context) > 0
-        logger.info(f"[SERVICE] ✓ RAG context retrieved: {len(rag_context)} chunks, used={rag_used}")
+        
+        logger.info(
+            f"[SERVICE] ✓ RAG context retrieved: {len(rag_context)} safe chunks "
+            f"(retrieved={diagnostics.retrieved_count}, "
+            f"filtered={diagnostics.filtered_count}), used={rag_used}"
+        )
+        
+        if diagnostics.filtered_count > 0:
+            logger.info(
+                f"[SERVICE] RAG filter reasons: {diagnostics.filter_reasons[:2]}"
+            )
     else:
         logger.warning(f"[SERVICE] RAG service not available, skipping context retrieval")
     

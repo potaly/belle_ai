@@ -1,4 +1,10 @@
-"""Prompt builder for copy generation."""
+"""Prompt builder for copy generation with strict factual grounding.
+
+重构说明：
+- 明确指示 LLM：当前商品信息是唯一的事实来源
+- RAG 内容仅用于表达方式或背景知识，不能引入新的事实
+- 严格禁止使用 RAG 中的价格、SKU、材质等具体信息
+"""
 from __future__ import annotations
 
 import logging
@@ -12,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class PromptBuilder:
-    """Builder for constructing prompts for copy generation."""
+    """Builder for constructing prompts for copy generation with strict factual grounding."""
 
     @staticmethod
     def build_copy_prompt(
@@ -21,19 +27,24 @@ class PromptBuilder:
         rag_context: Optional[List[str]] = None,
     ) -> str:
         """
-        Build a prompt for copy generation.
+        构建文案生成提示（严格事实基础）。
+        
+        核心原则：
+        1. 当前商品信息是唯一的事实来源
+        2. RAG 内容仅用于表达方式或背景知识
+        3. LLM 绝不能引入产品数据中没有的事实
         
         Args:
-            product: Product instance
+            product: Product instance (唯一事实来源)
             style: Copy style (natural, professional, funny)
-            rag_context: Optional RAG context chunks
+            rag_context: Optional RAG context chunks (仅用于表达参考)
         
         Returns:
-            Formatted prompt string
+            Formatted prompt string with strict grounding instructions
         """
         logger.info(f"[PROMPT] Building prompt for product: {product.name}, style: {style.value}")
         
-        # Extract product information
+        # Extract product information (唯一事实来源)
         product_name = product.name
         tags = product.tags or []
         tags_str = "、".join(tags) if tags else "时尚"
@@ -42,6 +53,7 @@ class PromptBuilder:
         scene = attributes.get("scene", "")
         material = attributes.get("material", "")
         price = product.price
+        sku = product.sku
         
         # Style descriptions
         style_descriptions = {
@@ -54,30 +66,47 @@ class PromptBuilder:
         # Build prompt
         prompt_parts = []
         
-        # System context (RAG if available)
-        # Note: RAG context contains similar products for reference only
-        # The LLM should focus on the current product information below
+        # System context (RAG if available) - 仅用于表达参考
         if rag_context:
-            prompt_parts.append("## 参考信息（相似商品，仅供参考，不要混淆）：")
-            prompt_parts.append("以下是一些相似商品的信息，仅作为参考，帮助你理解商品类型和特点。")
-            prompt_parts.append("**重要：请专注于下面'商品信息'部分的当前商品，不要使用参考信息中的价格、SKU等具体信息。**")
+            prompt_parts.append("## 参考信息（仅用于表达方式参考，禁止使用其中的事实信息）：")
+            prompt_parts.append(
+                "以下是一些相似商品的描述，**仅作为表达方式的参考**，帮助你理解如何描述商品特点。"
+            )
             prompt_parts.append("")
+            prompt_parts.append("**⚠️ 严格禁止事项：**")
+            prompt_parts.append("1. **禁止**使用参考信息中的价格、SKU、材质等具体事实信息")
+            prompt_parts.append("2. **禁止**将参考信息中的商品特征混入当前商品")
+            prompt_parts.append("3. **禁止**使用参考信息中的任何数字、规格、型号")
+            prompt_parts.append("4. **只能**参考表达方式和描述风格，不能参考具体内容")
+            prompt_parts.append("")
+            prompt_parts.append("参考信息（已过滤所有 SKU 和价格信息，仅保留描述性内容）：")
+            prompt_parts.append("")
+            
             for i, chunk in enumerate(rag_context[:3], 1):
-                # Extract only useful parts (remove SKU and price to avoid confusion)
-                # Keep only descriptive information
+                # 严格清理：移除所有 SKU 标记和价格信息
                 cleaned_chunk = chunk
-                # Remove SKU markers to avoid confusion
+                # 移除 SKU 标记（所有格式）
                 cleaned_chunk = re.sub(r'\[SKU:[^\]]+\]', '', cleaned_chunk)
-                # Remove explicit price mentions if they're too specific
-                cleaned_chunk = re.sub(r'价格为\d+\.\d+元', '', cleaned_chunk)
+                cleaned_chunk = re.sub(r'SKU:\s*[A-Z0-9]+', '', cleaned_chunk, flags=re.IGNORECASE)
+                # 移除价格信息
+                cleaned_chunk = re.sub(r'价格为?\s*\d+\.?\d*\s*元', '', cleaned_chunk)
+                cleaned_chunk = re.sub(r'\d+\.?\d*\s*元', '', cleaned_chunk)
+                # 移除其他可能的数字规格
+                cleaned_chunk = re.sub(r'型号[：:]\s*[A-Z0-9]+', '', cleaned_chunk, flags=re.IGNORECASE)
                 cleaned_chunk = cleaned_chunk.strip()
+                
                 if cleaned_chunk:
                     prompt_parts.append(f"{i}. {cleaned_chunk}")
+            
+            prompt_parts.append("")
+            prompt_parts.append("---")
             prompt_parts.append("")
         
-        # Product information
-        prompt_parts.append("## 商品信息：")
+        # Product information (唯一事实来源)
+        prompt_parts.append("## 商品信息（唯一事实来源）：")
         prompt_parts.append(f"商品名称：{product_name}")
+        if sku:
+            prompt_parts.append(f"商品SKU：{sku}")
         if tags:
             prompt_parts.append(f"商品标签：{tags_str}")
         if color:
@@ -88,6 +117,8 @@ class PromptBuilder:
             prompt_parts.append(f"材质：{material}")
         if price:
             prompt_parts.append(f"价格：{price}元")
+        prompt_parts.append("")
+        prompt_parts.append("**重要：以上商品信息是唯一的事实来源，所有文案内容必须基于这些信息。**")
         prompt_parts.append("")
         
         # Task description
@@ -100,8 +131,12 @@ class PromptBuilder:
         prompt_parts.append("3. 要有吸引力，能引起购买欲望")
         prompt_parts.append("4. 语言自然流畅，符合朋友圈风格")
         prompt_parts.append("5. 突出商品的核心卖点和特色")
-        if rag_context:
-            prompt_parts.append("6. **重要**：参考信息仅用于理解商品类型，文案必须基于当前商品信息，不要使用参考信息中的价格、SKU等具体信息")
+        prompt_parts.append("")
+        prompt_parts.append("**严格约束：**")
+        prompt_parts.append("1. 文案中的所有事实信息（价格、SKU、材质、颜色等）必须来自上面的'商品信息'部分")
+        prompt_parts.append("2. 如果参考信息中有相似描述，只能参考表达方式，不能使用其中的具体事实")
+        prompt_parts.append("3. 禁止引入任何商品信息中没有的内容（如其他商品的价格、材质等）")
+        prompt_parts.append("4. 确保文案中的价格、SKU、材质等信息与商品信息完全一致")
         prompt_parts.append("")
         prompt_parts.append("只输出文案内容，不要其他说明：")
         
@@ -134,4 +169,3 @@ class PromptBuilder:
         # Rough estimation
         tokens = int(chinese_chars / 1.5 + other_chars / 4)
         return max(tokens, 1)  # At least 1 token
-
