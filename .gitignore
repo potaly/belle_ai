@@ -18,6 +18,9 @@ env/
 *.swo
 *~
 
+# Cursor IDE rules (local configuration, do not commit)
+.cursor/rules/
+
 # Environment variables
 .env
 .env.local
