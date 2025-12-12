@@ -15,6 +15,7 @@ AgentNode = Callable[[AgentContext], Any]
 
 
 class AgentRunner:
+    
     """
     Runner for executing agent nodes and plans.
     
@@ -136,6 +137,7 @@ class AgentRunner:
         context: AgentContext,
         node_registry: dict[str, AgentNode],
     ) -> AgentContext:
+        
         """
         Execute a plan (sequence of node names).
         
