@@ -64,6 +64,7 @@ class AgentSalesFlowResponse(BaseModel):
                     },
                     "allowed": True,
                     "anti_disturb_blocked": False,
+                    "decision_reason": "用户意图级别为 high：用户已进入购买页面，这是强烈的购买信号。；反打扰检查通过，允许主动接触",
                     "rag_used": True,
                     "rag_chunks_count": 3,
                     "messages": [
@@ -72,7 +73,7 @@ class AgentSalesFlowResponse(BaseModel):
                             "content": "这是一款舒适的跑鞋，采用网面材质，透气轻便...",
                         },
                     ],
-                    "plan_executed": [
+                    "plan_used": [
                         "fetch_product",
                         "fetch_behavior_summary",
                         "classify_intent",

@@ -9,8 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.agents.context import AgentContext
-from app.agents.graph.sales_graph import run_sales_graph
-from app.agents.planner_agent import plan_sales_flow
+from app.agents.graph.sales_graph import BusinessLogicError, run_sales_graph
+from app.agents.planner_agent import build_final_plan, plan_sales_flow
 from app.core.database import get_db
 from app.schemas.sales_graph_schemas import SalesGraphRequest, SalesGraphResponse
 
@@ -73,15 +73,27 @@ async def execute_sales_graph(
         )
         
         # 决定执行计划
-        plan: list[str] | None = None
+        initial_plan: list[str] | None = None
         if request.use_custom_plan:
             logger.info("[API] Generating custom plan using planner")
-            plan = await plan_sales_flow(context)
-            logger.info(f"[API] Generated plan: {plan}")
+            initial_plan = await plan_sales_flow(context)
+            logger.info(f"[API] Generated initial plan: {initial_plan}")
+            
+            # 构建最终计划（确保包含强制节点）
+            logger.info("[API] Building final plan with mandatory nodes enforcement")
+            final_plan = build_final_plan(initial_plan, context)
+            if final_plan != initial_plan:
+                logger.info(
+                    f"[API] Plan updated: initial={initial_plan}, final={final_plan}"
+                )
+        else:
+            final_plan = None
         
         # 执行销售图
         logger.info("[API] Executing sales graph...")
-        result_context = await run_sales_graph(context, plan=plan)
+        result_context = await run_sales_graph(
+            context, plan=final_plan, enforce_mandatory=True
+        )
         
         execution_time = time.time() - start_time
         
@@ -100,13 +112,30 @@ async def execute_sales_graph(
             "execution_time_seconds": round(execution_time, 3),
         }
         
-        # 添加计划信息
-        if plan:
-            response_data["plan_used"] = plan
+        # 添加计划信息（必须为 List[str]）
+        if final_plan:
+            response_data["plan_used"] = final_plan
         else:
-            response_data["plan_used"] = "full_graph_flow"
+            # 完整图流程：返回所有执行的节点
+            response_data["plan_used"] = [
+                "fetch_product",
+                "fetch_behavior_summary",
+                "classify_intent",
+                "anti_disturb_check",
+                "retrieve_rag",
+                "generate_copy",
+            ]
         
-        # 添加意图原因
+        # 添加决策原因（decision_reason）
+        decision_reason = _generate_decision_reason(
+            intent_level=result_context.intent_level,
+            allowed=result_context.extra.get("allowed", False),
+            anti_disturb_blocked=result_context.extra.get("anti_disturb_blocked", False),
+            context=result_context,
+        )
+        response_data["decision_reason"] = decision_reason
+        
+        # 添加意图原因（保持向后兼容）
         if "intent_reason" in result_context.extra:
             response_data["intent_reason"] = result_context.extra["intent_reason"]
         
@@ -145,6 +174,23 @@ async def execute_sales_graph(
             data=response_data,
         )
         
+    except BusinessLogicError as e:
+        execution_time = time.time() - start_time
+        
+        logger.error(
+            f"[API] ✗ Business logic error after {execution_time:.3f}s: {e.message}",
+            exc_info=True,
+        )
+        logger.info("=" * 80)
+        
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Business logic validation failed",
+                "error_code": e.error_code,
+                "message": e.message,
+            },
+        )
     except Exception as e:
         execution_time = time.time() - start_time
         
@@ -158,6 +204,47 @@ async def execute_sales_graph(
             status_code=500,
             detail=f"Sales graph execution failed: {str(e)}",
         )
+
+
+def _generate_decision_reason(
+    intent_level: str | None,
+    allowed: bool,
+    anti_disturb_blocked: bool,
+    context: AgentContext,
+) -> str:
+    """
+    生成决策原因说明（用于可解释性）。
+    
+    Args:
+        intent_level: 用户意图级别
+        allowed: 是否允许主动接触
+        anti_disturb_blocked: 是否被反打扰机制阻止
+        context: Agent context
+    
+    Returns:
+        决策原因的文本说明
+    """
+    reasons = []
+    
+    # 意图级别说明
+    if intent_level:
+        intent_reason = context.extra.get("intent_reason", "")
+        if intent_reason:
+            reasons.append(f"用户意图级别为 {intent_level}：{intent_reason}")
+        else:
+            reasons.append(f"用户意图级别为 {intent_level}")
+    else:
+        reasons.append("无法确定用户意图级别（缺少行为数据）")
+    
+    # 反打扰决策说明
+    if anti_disturb_blocked:
+        reasons.append("反打扰机制阻止主动接触（低意图用户或系统策略）")
+    elif allowed:
+        reasons.append("反打扰检查通过，允许主动接触")
+    else:
+        reasons.append("反打扰检查未执行或结果未知")
+    
+    return "；".join(reasons)
 
 
 @router.get("/sales/graph/health")

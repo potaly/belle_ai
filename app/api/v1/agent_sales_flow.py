@@ -9,8 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.agents.context import AgentContext
-from app.agents.graph.sales_graph import run_sales_graph
-from app.agents.planner_agent import plan_sales_flow
+from app.agents.graph.sales_graph import BusinessLogicError, run_sales_graph
+from app.agents.planner_agent import build_final_plan, plan_sales_flow
 from app.core.database import get_db
 from app.schemas.agent_sales_flow_schemas import (
     AgentSalesFlowRequest,
@@ -105,12 +105,22 @@ async def execute_agent_sales_flow(
         
         # Step 2: Generate execution plan using planner
         logger.info("[AGENT_API] Step 2: Generating execution plan...")
-        plan = await plan_sales_flow(context)
-        logger.info(f"[AGENT_API] ✓ Plan generated: {plan}")
+        initial_plan = await plan_sales_flow(context)
+        logger.info(f"[AGENT_API] ✓ Initial plan generated: {initial_plan}")
         
-        # Step 3: Execute sales graph with plan
+        # Step 2.5: Build final plan with mandatory nodes enforcement
+        logger.info("[AGENT_API] Step 2.5: Building final plan with mandatory nodes...")
+        final_plan = build_final_plan(initial_plan, context)
+        if final_plan != initial_plan:
+            logger.info(
+                f"[AGENT_API] Plan updated: initial={initial_plan}, "
+                f"final={final_plan}"
+            )
+        logger.info(f"[AGENT_API] ✓ Final plan: {final_plan}")
+        
+        # Step 3: Execute sales graph with final plan
         logger.info("[AGENT_API] Step 3: Executing sales graph...")
-        result_context = await run_sales_graph(context, plan=plan)
+        result_context = await run_sales_graph(context, plan=final_plan, enforce_mandatory=True)
         logger.info(
             f"[AGENT_API] ✓ Graph execution completed. "
             f"Intent: {result_context.intent_level}, "
@@ -150,18 +160,37 @@ async def execute_agent_sales_flow(
         if result_context.behavior_summary:
             response_data["behavior_summary"] = result_context.behavior_summary
         
-        # Add intent information
-        if result_context.intent_level:
+        # Add intent information (must exist after execution)
+        intent_level = result_context.intent_level
+        if intent_level is None and result_context.user_id and result_context.behavior_summary:
+            # This should not happen if mandatory nodes are enforced
+            logger.warning(
+                "[AGENT_API] ⚠ intent_level is None despite having user_id and behavior_summary. "
+                "This indicates a business logic error."
+            )
+            intent_level = "unknown"  # Fallback value
+        
+        if intent_level:
             response_data["intent"] = {
-                "level": result_context.intent_level,
+                "level": intent_level,
                 "reason": result_context.extra.get("intent_reason", ""),
             }
         
-        # Add anti-disturb check results
-        response_data["allowed"] = result_context.extra.get("allowed", False)
-        response_data["anti_disturb_blocked"] = result_context.extra.get(
-            "anti_disturb_blocked", False
+        # Add anti-disturb check results (must exist after execution)
+        allowed = result_context.extra.get("allowed", False)
+        anti_disturb_blocked = result_context.extra.get("anti_disturb_blocked", False)
+        
+        # Generate decision_reason (explainable decision)
+        decision_reason = _generate_decision_reason(
+            intent_level=intent_level,
+            allowed=allowed,
+            anti_disturb_blocked=anti_disturb_blocked,
+            context=result_context,
         )
+        
+        response_data["allowed"] = allowed
+        response_data["anti_disturb_blocked"] = anti_disturb_blocked
+        response_data["decision_reason"] = decision_reason
         
         # Add RAG information
         rag_used = len(result_context.rag_chunks) > 0
@@ -175,8 +204,8 @@ async def execute_agent_sales_flow(
         ]
         response_data["messages"] = [msg.model_dump() for msg in messages]
         
-        # Add execution plan
-        response_data["plan_executed"] = plan
+        # Add execution plan (must be List[str])
+        response_data["plan_used"] = final_plan
         
         logger.info(
             f"[AGENT_API] ✓ Response built successfully. "
@@ -192,6 +221,23 @@ async def execute_agent_sales_flow(
             data=response_data,
         )
         
+    except BusinessLogicError as e:
+        execution_time = time.time() - start_time
+        
+        logger.error(
+            f"[AGENT_API] ✗ Business logic error after {execution_time:.3f}s: {e.message}",
+            exc_info=True,
+        )
+        logger.info("=" * 80)
+        
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Business logic validation failed",
+                "error_code": e.error_code,
+                "message": e.message,
+            },
+        )
     except HTTPException:
         # Re-raise HTTP exceptions
         logger.info("=" * 80)
@@ -210,4 +256,45 @@ async def execute_agent_sales_flow(
             status_code=500,
             detail=f"Agent sales flow execution failed: {str(e)}",
         )
+
+
+def _generate_decision_reason(
+    intent_level: str | None,
+    allowed: bool,
+    anti_disturb_blocked: bool,
+    context: AgentContext,
+) -> str:
+    """
+    生成决策原因说明（用于可解释性）。
+    
+    Args:
+        intent_level: 用户意图级别
+        allowed: 是否允许主动接触
+        anti_disturb_blocked: 是否被反打扰机制阻止
+        context: Agent context
+    
+    Returns:
+        决策原因的文本说明
+    """
+    reasons = []
+    
+    # 意图级别说明
+    if intent_level:
+        intent_reason = context.extra.get("intent_reason", "")
+        if intent_reason:
+            reasons.append(f"用户意图级别为 {intent_level}：{intent_reason}")
+        else:
+            reasons.append(f"用户意图级别为 {intent_level}")
+    else:
+        reasons.append("无法确定用户意图级别（缺少行为数据）")
+    
+    # 反打扰决策说明
+    if anti_disturb_blocked:
+        reasons.append("反打扰机制阻止主动接触（低意图用户或系统策略）")
+    elif allowed:
+        reasons.append("反打扰检查通过，允许主动接触")
+    else:
+        reasons.append("反打扰检查未执行或结果未知")
+    
+    return "；".join(reasons)
 
