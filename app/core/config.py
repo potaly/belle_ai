@@ -58,6 +58,15 @@ class Settings(BaseSettings):
 
     # Debug settings
     debug: bool = False  # Enable debug mode (DEBUG=true in .env)
+    
+    # Intent engine thresholds (conservative defaults)
+    intent_min_stay_for_high: int = 60  # Minimum stay time for high intent (with strong signals)
+    intent_min_visits_for_high_with_favorite: int = 2  # Min visits + favorite for high
+    intent_min_visits_for_hesitating: int = 3  # Min visits for hesitating
+    intent_min_stay_for_hesitating: int = 20  # Min stay for hesitating
+    intent_min_visits_for_medium: int = 2  # Min visits for medium
+    intent_min_stay_for_medium: int = 15  # Min stay for medium
+    intent_max_stay_for_low: int = 10  # Max stay for low (single visit)
 
     class Config:
         env_file = ".env"

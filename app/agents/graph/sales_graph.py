@@ -14,6 +14,7 @@ from app.agents.planner_agent import (
     TASK_FETCH_PRODUCT,
     TASK_GENERATE_COPY,
     TASK_RETRIEVE_RAG,
+    build_final_plan,
 )
 from app.agents.tools.behavior_tool import fetch_behavior_summary
 from app.agents.tools.copy_tool import generate_marketing_copy
@@ -209,9 +210,23 @@ def get_sales_graph() -> StateGraph:
     return _sales_graph
 
 
+class BusinessLogicError(Exception):
+    """
+    业务逻辑错误：当强制业务步骤未执行或结果不完整时抛出。
+    
+    这个错误用于确保业务关键字段（如 intent_level）始终存在。
+    """
+    
+    def __init__(self, message: str, error_code: str = "MISSING_MANDATORY_FIELD"):
+        self.message = message
+        self.error_code = error_code
+        super().__init__(self.message)
+
+
 async def run_sales_graph(
     context: AgentContext,
     plan: list[str] | None = None,
+    enforce_mandatory: bool = True,
 ) -> AgentContext:
     """
     运行销售流程图。
@@ -220,14 +235,18 @@ async def run_sales_graph(
     - 如果提供了 plan，按计划顺序执行节点（忽略图中定义的顺序）
     - 如果没有 plan，使用图中定义的完整流程
     - 执行过程中，如果反打扰检查拒绝，会提前结束
-    - 执行完成后，返回更新后的 context
+    - 执行完成后，验证强制业务字段是否存在
+    - 如果 intent_level 为 None，抛出 BusinessLogicError
     
     Args:
         context: 初始 Agent context
         plan: 可选的节点执行计划（如果为 None，使用完整流程）
     
     Returns:
-        执行完成后的 AgentContext
+        执行完成后的 AgentContext（保证包含 intent_level 和 allowed 字段）
+    
+    Raises:
+        BusinessLogicError: 如果强制业务字段缺失（如 intent_level 为 None）
     
     Example:
         >>> context = AgentContext(user_id="user_001", sku="8WZ01CM1")
@@ -239,18 +258,27 @@ async def run_sales_graph(
     logger.info("[SALES_GRAPH] Starting sales graph execution")
     logger.info(f"[SALES_GRAPH] Context: user_id={context.user_id}, sku={context.sku}")
     
-    if plan:
-        logger.info(f"[SALES_GRAPH] Using custom plan: {' -> '.join(plan)}")
+    # 如果启用了强制节点保护，确保计划包含所有强制节点
+    final_plan = plan
+    if plan and enforce_mandatory:
+        logger.info("[SALES_GRAPH] Enforcing mandatory nodes in plan")
+        final_plan = build_final_plan(plan, context)
+        if final_plan != plan:
+            logger.info(
+                f"[SALES_GRAPH] Plan updated: original={plan}, "
+                f"final={final_plan}"
+            )
+    
+    if final_plan:
+        logger.info(f"[SALES_GRAPH] Using plan: {' -> '.join(final_plan)}")
         # 如果提供了计划，按计划顺序执行节点
-        # 这里我们创建一个简化的执行流程
-        return await _execute_plan(context, plan)
+        result_context = await _execute_plan(context, final_plan)
     else:
         logger.info("[SALES_GRAPH] Using full graph flow")
         # 使用完整的图流程
         graph = get_sales_graph()
         # 打印当前执行的销售流程图名称（用于调试和监控）
         logger.info(f"[SALES_GRAPH] Compiled graph name: {graph.__class__.__name__}")
-        # INSERT_YOUR_CODE
         # 获取所有需要执行的节点名并打印（调试用途）
         try:
             # 假设 graph.nodes 或 graph.get_nodes() 返回节点名或节点对象列表
@@ -270,16 +298,6 @@ async def run_sales_graph(
         try:
             final_state = await graph.ainvoke(initial_state)
             result_context = final_state["context"]
-            
-            logger.info(
-                f"[SALES_GRAPH] ✓ Graph execution completed. "
-                f"Final context: messages={len(result_context.messages)}, "
-                f"intent_level={result_context.intent_level}"
-            )
-            logger.info("=" * 80)
-            
-            return result_context
-            
         except Exception as e:
             logger.error(
                 f"[SALES_GRAPH] ✗ Graph execution failed: {e}",
@@ -288,6 +306,65 @@ async def run_sales_graph(
             logger.info("=" * 80)
             # 返回原始上下文，避免状态损坏
             return context
+    
+    # 执行后验证：确保强制业务字段存在
+    _validate_mandatory_fields(result_context, plan)
+    
+    logger.info(
+        f"[SALES_GRAPH] ✓ Graph execution completed. "
+        f"Final context: messages={len(result_context.messages)}, "
+        f"intent_level={result_context.intent_level}, "
+        f"allowed={result_context.extra.get('allowed', None)}"
+    )
+    logger.info("=" * 80)
+    
+    return result_context
+
+
+def _validate_mandatory_fields(context: AgentContext, plan: list[str] | None) -> None:
+    """
+    验证强制业务字段是否存在。
+    
+    核心规则：
+    - intent_level 绝不能为 None（如果 user_id 和 behavior_summary 存在）
+    - allowed / anti_disturb_blocked 必须存在（如果执行了 anti_disturb_check）
+    
+    Args:
+        context: 执行完成后的 AgentContext
+        plan: 执行的计划（用于生成错误消息）
+    
+    Raises:
+        BusinessLogicError: 如果强制字段缺失
+    """
+    # 检查 intent_level
+    if context.user_id and context.behavior_summary:
+        # 如果有 user_id 和 behavior_summary，必须有 intent_level
+        if context.intent_level is None:
+            plan_str = " -> ".join(plan) if plan else "full_graph_flow"
+            error_msg = (
+                f"Mandatory field 'intent_level' is missing after graph execution. "
+                f"This indicates that 'classify_intent' node was not executed or failed. "
+                f"Plan executed: {plan_str}. "
+                f"This is a business logic error and must be fixed."
+            )
+            logger.error(f"[SALES_GRAPH] ✗ {error_msg}")
+            raise BusinessLogicError(error_msg, error_code="MISSING_INTENT_LEVEL")
+    
+    # 检查 allowed / anti_disturb_blocked（如果执行了反打扰检查）
+    if context.intent_level is not None or context.behavior_summary is not None:
+        # 如果有了意图级别或行为摘要，应该执行了反打扰检查
+        if "allowed" not in context.extra:
+            plan_str = " -> ".join(plan) if plan else "full_graph_flow"
+            error_msg = (
+                f"Mandatory field 'allowed' is missing after graph execution. "
+                f"This indicates that 'anti_disturb_check' node was not executed or failed. "
+                f"Plan executed: {plan_str}. "
+                f"This is a business logic error and must be fixed."
+            )
+            logger.error(f"[SALES_GRAPH] ✗ {error_msg}")
+            raise BusinessLogicError(error_msg, error_code="MISSING_ANTI_DISTURB_RESULT")
+    
+    logger.debug("[SALES_GRAPH] ✓ Mandatory fields validation passed")
 
 
 async def _execute_plan(context: AgentContext, plan: list[str]) -> AgentContext:

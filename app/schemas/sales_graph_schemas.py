@@ -45,6 +45,7 @@ class SalesGraphResponse(BaseModel):
                         "适合日常跑步和长距离训练，深受跑者喜爱..."
                     ],
                     "plan_used": ["fetch_product", "fetch_behavior_summary", "classify_intent", "anti_disturb_check", "retrieve_rag", "generate_copy"],
+                    "decision_reason": "用户意图级别为 high：用户已进入购买页面，这是强烈的购买信号。；反打扰检查通过，允许主动接触",
                     "final_message": "这是一款舒适的跑鞋...",
                 },
             },

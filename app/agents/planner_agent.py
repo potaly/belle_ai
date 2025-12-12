@@ -24,6 +24,22 @@ TASK_RETRIEVE_RAG = "retrieve_rag"
 TASK_GENERATE_COPY = "generate_copy"
 TASK_GENERATE_FOLLOWUP = "generate_followup"
 
+# Mandatory business nodes (CANNOT be skipped under any execution mode)
+# These nodes are critical for business correctness and must always execute
+MANDATORY_NODES: List[str] = [
+    TASK_FETCH_PRODUCT,
+    TASK_FETCH_BEHAVIOR_SUMMARY,
+    TASK_CLASSIFY_INTENT,
+    TASK_ANTI_DISTURB_CHECK,
+]
+
+# Optional nodes (can be skipped based on business rules)
+OPTIONAL_NODES: List[str] = [
+    TASK_RETRIEVE_RAG,
+    TASK_GENERATE_COPY,
+    TASK_GENERATE_FOLLOWUP,
+]
+
 
 async def plan_sales_flow(context: AgentContext) -> List[str]:
     """
@@ -99,8 +115,8 @@ async def plan_sales_flow(context: AgentContext) -> List[str]:
     if not intent_level and context.behavior_summary:
         # 如果意图未分类但有行为数据，尝试预分类用于规划
         try:
-            _, _ = classify_intent(context.behavior_summary)
-            intent_level = None  # 将在 classify_intent 节点执行后设置
+            result = classify_intent(context.behavior_summary)
+            intent_level = result.level  # 使用预分类结果（但最终会在节点执行后更新）
         except Exception:
             pass
     
@@ -274,6 +290,102 @@ class PlannerAgent:
             TASK_GENERATE_COPY,
             TASK_GENERATE_FOLLOWUP,
         ]
+
+
+def build_final_plan(
+    custom_plan: List[str],
+    context: AgentContext,
+) -> List[str]:
+    """
+    构建最终执行计划，确保强制节点始终被包含。
+    
+    核心逻辑：
+    - 强制节点（mandatory nodes）必须始终包含在最终计划中
+    - 自定义计划只能影响可选节点（optional nodes）
+    - 强制节点按依赖顺序自动注入到最终计划
+    
+    调用逻辑：
+    - 在 run_sales_graph 执行前调用，确保计划完整性
+    - 无论 custom_plan 是否包含强制节点，都会自动注入
+    - 如果 custom_plan 为空，则使用完整规则计划
+    
+    Args:
+        custom_plan: 自定义计划（可能缺少强制节点）
+        context: Agent context（用于判断是否需要某些节点）
+    
+    Returns:
+        最终执行计划（包含所有强制节点，按依赖顺序排列）
+    
+    Example:
+        >>> custom_plan = ["retrieve_rag", "generate_copy"]  # 缺少强制节点
+        >>> final_plan = build_final_plan(custom_plan, context)
+        >>> print(final_plan)
+        ['fetch_product', 'fetch_behavior_summary', 'classify_intent', 
+         'anti_disturb_check', 'retrieve_rag', 'generate_copy']
+    """
+    logger.info("=" * 80)
+    logger.info("[PLANNER] Building final plan with mandatory nodes enforcement")
+    logger.info(f"[PLANNER] Custom plan: {custom_plan}")
+    
+    # 步骤1：构建强制节点列表（按依赖顺序）
+    mandatory_plan: List[str] = []
+    
+    # 1.1 fetch_product（必需，后续步骤依赖）
+    if not context.product:
+        mandatory_plan.append(TASK_FETCH_PRODUCT)
+        logger.debug("[PLANNER] Added mandatory: fetch_product")
+    
+    # 1.2 fetch_behavior_summary（需要 user_id 和 sku）
+    if context.user_id and context.sku and not context.behavior_summary:
+        mandatory_plan.append(TASK_FETCH_BEHAVIOR_SUMMARY)
+        logger.debug("[PLANNER] Added mandatory: fetch_behavior_summary")
+    elif not context.user_id:
+        logger.warning(
+            "[PLANNER] Skipping fetch_behavior_summary: no user_id provided. "
+            "This may result in missing intent_level."
+        )
+    
+    # 1.3 classify_intent（依赖 behavior_summary）
+    if context.behavior_summary and not context.intent_level:
+        mandatory_plan.append(TASK_CLASSIFY_INTENT)
+        logger.debug("[PLANNER] Added mandatory: classify_intent")
+    elif not context.behavior_summary:
+        logger.warning(
+            "[PLANNER] Skipping classify_intent: no behavior_summary. "
+            "This may result in missing intent_level."
+        )
+    
+    # 1.4 anti_disturb_check（依赖 intent_level 或 behavior_summary）
+    if context.intent_level or context.behavior_summary:
+        mandatory_plan.append(TASK_ANTI_DISTURB_CHECK)
+        logger.debug("[PLANNER] Added mandatory: anti_disturb_check")
+    else:
+        logger.warning(
+            "[PLANNER] Skipping anti_disturb_check: no intent_level or behavior_summary. "
+            "This may result in missing allowed/anti_disturb_blocked."
+        )
+    
+    # 步骤2：从自定义计划中提取可选节点（保持顺序）
+    optional_from_custom: List[str] = [
+        node for node in custom_plan if node in OPTIONAL_NODES
+    ]
+    
+    # 步骤3：合并强制节点和可选节点
+    final_plan = mandatory_plan + optional_from_custom
+    
+    # 步骤4：去重（保持第一次出现的顺序）
+    seen = set()
+    deduplicated_plan: List[str] = []
+    for node in final_plan:
+        if node not in seen:
+            seen.add(node)
+            deduplicated_plan.append(node)
+    
+    logger.info(f"[PLANNER] ✓ Final plan built: {len(deduplicated_plan)} nodes")
+    logger.info(f"[PLANNER] Final plan: {' -> '.join(deduplicated_plan)}")
+    logger.info("=" * 80)
+    
+    return deduplicated_plan
 
 
 # Convenience function
