@@ -115,8 +115,8 @@ async def plan_sales_flow(context: AgentContext) -> List[str]:
     if not intent_level and context.behavior_summary:
         # 如果意图未分类但有行为数据，尝试预分类用于规划
         try:
-            _, _ = classify_intent(context.behavior_summary)
-            intent_level = None  # 将在 classify_intent 节点执行后设置
+            result = classify_intent(context.behavior_summary)
+            intent_level = result.level  # 使用预分类结果（但最终会在节点执行后更新）
         except Exception:
             pass
     

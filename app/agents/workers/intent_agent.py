@@ -43,15 +43,15 @@ async def classify_intent_node(context: AgentContext) -> AgentContext:
     
     try:
         # 核心逻辑：调用意图分析引擎，基于行为摘要分类意图
-        intent_level, reason = classify_intent(context.behavior_summary)
+        result = classify_intent(context.behavior_summary)
         
-        # 更新上下文：保存意图级别和原因
-        context.intent_level = intent_level
-        context.extra["intent_reason"] = reason
+        # 更新上下文：保存意图级别和原因（确保永远不为 None）
+        context.intent_level = result.level
+        context.extra["intent_reason"] = result.reason
         
         logger.info(
-            f"[INTENT_AGENT] ✓ Intent classified: level={intent_level}, "
-            f"reason={reason[:50]}..."
+            f"[INTENT_AGENT] ✓ Intent classified: level={result.level}, "
+            f"reason={result.reason[:50]}..."
         )
         logger.info("=" * 80)
         

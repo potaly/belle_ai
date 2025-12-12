@@ -152,7 +152,9 @@ async def suggest_followup(
             
             # Step 4: Classify intent
             logger.info("[API] Step 4: Classifying intent...")
-            intention_level, reason = classify_intent(summary)
+            result = classify_intent(summary)
+            intention_level = result.level
+            reason = result.reason
             logger.info(f"[API] ✓ Intent classified: {intention_level}, reason: {reason}")
         
         # Step 5: Generate follow-up suggestion

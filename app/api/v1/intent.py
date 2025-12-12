@@ -147,7 +147,9 @@ async def analyze_intent(
         
         # Step 3: Classify intent
         logger.info("[API] Step 3: Classifying intent...")
-        intent_level, reason = classify_intent(summary_dict)
+        result = classify_intent(summary_dict)
+        intent_level = result.level
+        reason = result.reason
         
         logger.info(f"[API] ✓ Intent classified: {intent_level}")
         logger.info(f"[API] Reason: {reason}")
