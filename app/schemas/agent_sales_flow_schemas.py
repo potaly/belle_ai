@@ -67,6 +67,15 @@ class AgentSalesFlowResponse(BaseModel):
                     "decision_reason": "用户意图级别为 high：用户已进入购买页面，这是强烈的购买信号。；反打扰检查通过，允许主动接触",
                     "rag_used": True,
                     "rag_chunks_count": 3,
+                    "rag_diagnostics": {
+                        "retrieved_count": 6,
+                        "filtered_count": 3,
+                        "safe_count": 3,
+                        "filter_reasons": [
+                            "Chunk contains foreign SKU(s): 8WZ76CM6 (prevent cross-SKU contamination)",
+                            "Chunk contains current SKU 8WZ01CM1 (redundant with product data)"
+                        ]
+                    },
                     "messages": [
                         {
                             "role": "assistant",
