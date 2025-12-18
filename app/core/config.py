@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     app_name: str = "AI Smart Guide Service"
-    app_version: str = "4.0.4"
+    app_version: str = "5.3.0"
     app_env: str = "dev"  # Environment: dev, test, prod
 
     # Database settings
@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     intent_min_visits_for_medium: int = 2  # Min visits for medium
     intent_min_stay_for_medium: int = 15  # Min stay for medium
     intent_max_stay_for_low: int = 10  # Max stay for low (single visit)
+    
+    # Copy generation settings (V5.3.0+)
+    copy_max_length: int = 45  # Maximum length for private-chat sales copy (characters)
 
     class Config:
         env_file = ".env"

@@ -1,128 +1,196 @@
-"""Copy tool for generating marketing copy."""
+"""Copy tool for generating private-chat sales copy (V5.3.0+).
+
+重构说明：
+- 从"营销广告"升级为"导购 1v1 私聊促单话术"
+- 使用新的 prompt_templates 和 fallback_copy
+- 根据 intent_level 使用不同策略
+"""
 from __future__ import annotations
 
 import logging
 from typing import Any
 
 from app.agents.context import AgentContext
-from app.schemas.copy_schemas import CopyStyle
+from app.core.config import get_settings
+from app.services.fallback_copy import generate_fallback_copy
 from app.services.llm_client import LLMClientError, get_llm_client
-from app.services.prompt_builder import PromptBuilder
+from app.services.prompt_templates import (
+    build_system_prompt,
+    build_user_prompt,
+    validate_copy_output,
+)
 
 logger = logging.getLogger(__name__)
 
 
 async def generate_marketing_copy(
     context: AgentContext,
-    style: CopyStyle = CopyStyle.natural,
+    style: Any = None,  # Legacy parameter, ignored in V5.3.0+
     **kwargs: Any,
 ) -> AgentContext:
     """
-    生成营销文案并添加到上下文消息。
+    生成导购 1v1 私聊促单话术并添加到上下文消息。
     
     调用逻辑：
-    - 通常在 retrieve_rag 之后执行（generate_copy），作为流程的最后一步
-    - 前提条件：context.product 必须已设置（必需），context.rag_chunks 可选（用于增强）
-    - 调用场景：规划器在反打扰检查通过后才会添加此任务
-    - 调用后：生成的文案添加到 context.messages，可通过 context.get_latest() 获取
-    - 依赖关系：依赖商品信息和 RAG 上下文（如果有）来生成高质量文案
-    
-    This tool uses prompt_builder to construct a prompt, calls llm_client.stream_chat
-    to generate copy, and updates context.messages with the generated text.
+    - 通常在 classify_intent 和 anti_disturb_check 之后执行
+    - 前提条件：context.product 和 context.intent_level 必须已设置
+    - 根据 intent_level 使用不同策略
+    - LLM 失败时自动降级到规则模板
     
     Args:
-        context: Agent context (should have product and optionally rag_chunks set)
-        style: Copy style (natural, professional, funny) - default: natural
+        context: Agent context (must have product and intent_level set)
+        style: Legacy parameter (ignored in V5.3.0+)
         **kwargs: Additional arguments (ignored)
     
     Returns:
         Updated AgentContext with generated copy added to messages
-    
-    Example:
-        >>> context = AgentContext(sku="8WZ01CM1")
-        >>> context.product = Product(name="舒适跑鞋", ...)
-        >>> context.rag_chunks = ["相关商品信息..."]
-        >>> context = await generate_marketing_copy(context, style=CopyStyle.natural)
-        >>> print(context.messages[-1]["content"])
-        '这是一款舒适的跑鞋...'
     """
     logger.info("=" * 80)
-    logger.info("[COPY_TOOL] Generating marketing copy")
+    logger.info("[COPY_TOOL] Generating private-chat sales copy")
     logger.info(
         f"[COPY_TOOL] Context: sku={context.sku}, "
-        f"style={style.value}, has_product={context.product is not None}, "
-        f"rag_chunks={len(context.rag_chunks)}"
+        f"intent_level={context.intent_level}, "
+        f"has_product={context.product is not None}"
     )
     
+    # Validate prerequisites
     if not context.product:
         error_msg = "Product is required in context to generate copy"
         logger.error(f"[COPY_TOOL] ✗ {error_msg}")
-        context.add_message(
-            "assistant",
-            "抱歉，无法生成文案：缺少商品信息。",
-        )
+        context.add_message("assistant", "抱歉，无法生成话术：缺少商品信息。")
         return context
     
+    if not context.intent_level:
+        error_msg = "Intent level is required in context to generate copy"
+        logger.error(f"[COPY_TOOL] ✗ {error_msg}")
+        context.add_message("assistant", "抱歉，无法生成话术：缺少意图分析结果。")
+        return context
+    
+    # Get configuration
+    settings = get_settings()
+    max_length = settings.copy_max_length
+    
+    # Get intent reason from context
+    intent_reason = context.extra.get("intent_reason", "用户浏览了商品")
+    behavior_summary = context.behavior_summary
+    
     try:
-        # 核心逻辑：构建 prompt（包含商品信息、RAG上下文、风格要求）
-        prompt_builder = PromptBuilder()
-        prompt = prompt_builder.build_copy_prompt(
+        # Build prompts
+        system_prompt = build_system_prompt()
+        user_prompt = build_user_prompt(
             product=context.product,
-            style=style,
-            rag_context=context.rag_chunks if context.rag_chunks else None,
+            intent_level=context.intent_level,
+            intent_reason=intent_reason,
+            behavior_summary=behavior_summary,
+            max_length=max_length,
         )
         
-        logger.info(f"[COPY_TOOL] Prompt built: {len(prompt)} chars")
+        logger.info(f"[COPY_TOOL] Prompt built: {len(user_prompt)} chars")
+        logger.debug(f"[COPY_TOOL] === [DEBUG] System Prompt ===\n{system_prompt}\n=== [END] ===")
+        logger.debug(f"[COPY_TOOL] === [DEBUG] User Prompt ===\n{user_prompt[:500]}...\n=== [END] ===")
         
-        # 调用流式 LLM 生成文案
+        # Try LLM generation
+        llm_used = False
+        copy_text = None
+        
         llm_client = get_llm_client()
-        system_prompt = "你是一个专业的鞋类销售文案写手，擅长写吸引人的朋友圈文案。"
+        if llm_client.settings.llm_api_key and llm_client.settings.llm_base_url:
+            logger.info("[COPY_TOOL] Calling LLM to generate copy...")
+            
+            try:
+                full_response = ""
+                async for chunk in llm_client.stream_chat(
+                    user_prompt,
+                    system=system_prompt,
+                    temperature=0.7,  # Lower temperature for more controlled output
+                    max_tokens=150,
+                ):
+                    if chunk:
+                        full_response += chunk
+                
+                copy_text = full_response.strip()
+                
+                # Validate output
+                is_valid, error_msg = validate_copy_output(copy_text, max_length)
+                if is_valid:
+                    llm_used = True
+                    logger.info(
+                        f"[COPY_TOOL] ✓ LLM generation successful: "
+                        f"{len(copy_text)} chars"
+                    )
+                else:
+                    logger.warning(
+                        f"[COPY_TOOL] ⚠ LLM output validation failed: {error_msg}, "
+                        f"falling back to template"
+                    )
+                    copy_text = None
+                    
+            except LLMClientError as e:
+                logger.warning(f"[COPY_TOOL] ⚠ LLM error: {e}, falling back to template")
+            except Exception as e:
+                logger.error(
+                    f"[COPY_TOOL] ✗ Unexpected error during LLM generation: {e}",
+                    exc_info=True,
+                )
+        else:
+            logger.warning(f"[COPY_TOOL] LLM not configured, using fallback")
         
-        logger.info("[COPY_TOOL] Calling LLM to generate copy...")
-        full_response = ""
-        # INSERT_YOUR_CODE
-        logger.info(f"[COPY_TOOL] === [DEBUG] Prompt Sent to LLM ===\n{prompt}\n=== [END PROMPT] ===")
-        try:
-            # 流式接收 LLM 响应，拼接完整文案
-            async for chunk in llm_client.stream_chat(
-                prompt,
-                system=system_prompt,
-                temperature=0.8,
-                max_tokens=200,
-            ):
-                if chunk:
-                    full_response += chunk
-        except LLMClientError as e:
-            logger.error(f"[COPY_TOOL] ✗ LLM streaming failed: {e}")
-            # LLM 失败时使用降级消息
-            full_response = "抱歉，文案生成失败，请稍后重试。"
+        # Fallback to rule-based template
+        if not copy_text or not llm_used:
+            logger.info(f"[COPY_TOOL] Using fallback template...")
+            copy_text = generate_fallback_copy(
+                product=context.product,
+                intent_level=context.intent_level,
+                max_length=max_length,
+            )
+            llm_used = False
+            logger.info(
+                f"[COPY_TOOL] ✓ Fallback copy generated: {len(copy_text)} chars"
+            )
         
-        # 清理并验证响应
-        full_response = full_response.strip()
-        if not full_response:
-            full_response = "抱歉，未能生成文案内容。"
+        # Store diagnostics in context
+        context.extra["copy_llm_used"] = llm_used
+        context.extra["copy_strategy"] = _get_strategy_description(context.intent_level)
         
-        # 将生成的文案添加到上下文消息中
-        context.add_message("assistant", full_response)
+        # Add to context messages
+        context.add_message("assistant", copy_text)
         
         logger.info(
-            f"[COPY_TOOL] ✓ Copy generated: {len(full_response)} chars, "
-            f"style={style.value}"
+            f"[COPY_TOOL] ✓ Copy generated: {len(copy_text)} chars, "
+            f"llm_used={llm_used}, strategy={context.extra['copy_strategy']}"
         )
-        logger.info(f"[COPY_TOOL] Generated copy: {full_response[:100]}...")
+        logger.info(f"[COPY_TOOL] Generated copy: {copy_text}")
         logger.info("=" * 80)
         
         return context
         
     except Exception as e:
         logger.error(
-            f"[COPY_TOOL] ✗ Error generating marketing copy: {e}",
+            f"[COPY_TOOL] ✗ Error generating copy: {e}",
             exc_info=True,
         )
-        # Add error message to context
-        context.add_message(
-            "assistant",
-            "抱歉，文案生成过程中出现错误，请稍后重试。",
-        )
+        # Fallback to simple template
+        try:
+            copy_text = generate_fallback_copy(
+                product=context.product,
+                intent_level=context.intent_level,
+                max_length=max_length,
+            )
+            context.add_message("assistant", copy_text)
+            logger.info(f"[COPY_TOOL] ✓ Emergency fallback copy generated")
+        except Exception as fallback_error:
+            logger.error(f"[COPY_TOOL] ✗ Fallback also failed: {fallback_error}")
+            context.add_message("assistant", "抱歉，话术生成失败，请稍后重试。")
+        
         return context
 
+
+def _get_strategy_description(intent_level: str) -> str:
+    """Get strategy description for logging."""
+    strategies = {
+        "high": "主动推进（询问尺码/提醒库存）",
+        "hesitating": "消除顾虑（轻量提问）",
+        "medium": "场景化推荐",
+        "low": "轻量提醒（不施压）",
+    }
+    return strategies.get(intent_level, "场景化推荐")

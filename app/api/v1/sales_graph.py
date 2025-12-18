@@ -12,7 +12,20 @@ from app.agents.context import AgentContext
 from app.agents.graph.sales_graph import BusinessLogicError, run_sales_graph
 from app.agents.planner_agent import build_final_plan, plan_sales_flow
 from app.core.database import get_db
-from app.schemas.sales_graph_schemas import SalesGraphRequest, SalesGraphResponse
+from app.schemas.sales_graph_schemas import (
+    FollowupPlaybookItemSchema,
+    MessageItemSchema,
+    SalesGraphRequest,
+    SalesGraphResponse,
+    SalesSuggestionSchema,
+    SendRecommendationSchema,
+)
+from app.services.sales_suggestion_service import (
+    MessageItem,
+    SalesSuggestion,
+    SendRecommendation,
+    build_suggestion_pack,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -152,11 +165,75 @@ async def execute_sales_graph(
         if "intent_reason" in result_context.extra:
             response_data["intent_reason"] = result_context.extra["intent_reason"]
         
-        # 添加最后一条消息（通常是生成的文案）
+        # 添加最后一条消息（通常是生成的文案）- 保持向后兼容
         if result_context.messages:
             last_message = result_context.messages[-1]
             if last_message.get("role") == "assistant":
                 response_data["final_message"] = last_message.get("content", "")
+        
+        # 生成销售建议包（V5.4.0+）
+        try:
+            if result_context.product and result_context.intent_level:
+                logger.info("[API] Building sales suggestion pack...")
+                suggestion = await build_suggestion_pack(result_context)
+                
+                # 转换为 schema
+                suggestion_schema = SalesSuggestionSchema(
+                    intent_level=suggestion.intent_level,
+                    confidence=suggestion.confidence,
+                    why_now=suggestion.why_now,
+                    recommended_action=suggestion.recommended_action,
+                    action_explanation=suggestion.action_explanation,
+                    message_pack=[
+                        MessageItemSchema(
+                            type=msg.type,
+                            strategy=msg.strategy,
+                            message=msg.message,
+                        )
+                        for msg in suggestion.message_pack
+                    ],
+                    send_recommendation=SendRecommendationSchema(
+                        suggested=suggestion.send_recommendation.suggested,
+                        best_timing=suggestion.send_recommendation.best_timing,
+                        note=suggestion.send_recommendation.note,
+                        risk_level=suggestion.send_recommendation.risk_level,
+                        next_step=suggestion.send_recommendation.next_step,
+                    ),
+                    followup_playbook=[
+                        FollowupPlaybookItemSchema(
+                            condition=item.condition,
+                            reply=item.reply,
+                        )
+                        for item in suggestion.followup_playbook
+                    ],
+                )
+                response_data["sales_suggestion"] = suggestion_schema.model_dump()
+                
+                # 确保 final_message 等于 primary message（向后兼容）
+                if suggestion.message_pack:
+                    primary_msg = next(
+                        (msg for msg in suggestion.message_pack if msg.type == "primary"),
+                        suggestion.message_pack[0],
+                    )
+                    response_data["final_message"] = primary_msg.message
+                
+                logger.info(
+                    f"[API] ✓ Sales suggestion pack built: "
+                    f"action={suggestion.recommended_action}, "
+                    f"messages={len(suggestion.message_pack)}, "
+                    f"suggested={suggestion.send_recommendation.suggested}"
+                )
+            else:
+                logger.warning(
+                    "[API] ⚠ Cannot build sales suggestion pack: "
+                    "missing product or intent_level"
+                )
+        except Exception as e:
+            logger.error(
+                f"[API] ✗ Failed to build sales suggestion pack: {e}",
+                exc_info=True,
+            )
+            # 不抛出异常，保持向后兼容
         
         # 添加商品信息摘要（如果有）
         if result_context.product:
