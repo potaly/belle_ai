@@ -2,6 +2,7 @@
 import logging
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import (
     agent_sales_flow as agent_sales_flow_router,
@@ -84,6 +85,20 @@ app = FastAPI(
             "description": "AI Agent 系统接口，包括销售流程图和智能销售 Agent",
         },
     ],
+)
+
+# Configure CORS (允许 Demo 页面跨域访问)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://127.0.0.1:8080",
+        "http://localhost:8080",
+        "http://127.0.0.1:3000",
+        "http://localhost:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Include routers

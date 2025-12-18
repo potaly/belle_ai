@@ -18,6 +18,92 @@ class SalesGraphRequest(BaseModel):
     )
 
 
+class MessageItemSchema(BaseModel):
+    """Message item in message pack."""
+
+    type: str = Field(..., description="Message type: 'primary' or 'alternative'")
+    strategy: str = Field(..., description="Strategy description")
+    message: str = Field(..., description="Message content")
+
+
+class FollowupPlaybookItemSchema(BaseModel):
+    """Follow-up playbook item for guides (V5.8.0+)."""
+
+    condition: str = Field(..., description="Customer response condition (e.g., '顾客说尺码不确定')")
+    reply: str = Field(..., description="Suggested reply message")
+
+
+class SendRecommendationSchema(BaseModel):
+    """Send recommendation with risk assessment (V5.6.0+)."""
+
+    suggested: bool = Field(..., description="Whether to send")
+    best_timing: str = Field(..., description="Best timing: 'now', 'within 30 minutes', 'tonight 19-21', etc.")
+    note: str = Field(..., description="Short operational note")
+    risk_level: str = Field(..., description="Risk level: 'low', 'medium', or 'high'")
+    next_step: str = Field(..., description="What the guide should do after customer replies")
+
+
+class SalesSuggestionSchema(BaseModel):
+    """Sales suggestion pack for store guides (V5.4.0+)."""
+
+    intent_level: str = Field(..., description="Intent level: high/hesitating/medium/low")
+    confidence: str = Field(..., description="Confidence level: high/medium/low")
+    why_now: str = Field(..., description="Human readable explanation for timing")
+    recommended_action: str = Field(..., description="Recommended action type")
+    action_explanation: str = Field(..., description="Explanation of recommended action")
+    message_pack: List[MessageItemSchema] = Field(..., description="3+ candidate messages with different strategies (V5.6.0+)")
+    send_recommendation: SendRecommendationSchema = Field(..., description="Send recommendation")
+    followup_playbook: List[FollowupPlaybookItemSchema] = Field(
+        default_factory=list,
+        description="Follow-up playbook for guides (V5.8.0+ - only for high/hesitating intent)",
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "intent_level": "high",
+                "confidence": "high",
+                "why_now": "用户已访问 3 次，表现出持续关注；用户已收藏商品",
+                "recommended_action": "ask_size",
+                "action_explanation": "用户已查看尺码表，建议主动询问尺码以推进购买",
+                "message_pack": [
+                    {
+                        "type": "primary",
+                        "strategy": "询问尺码",
+                        "message": "我看你刚进到购买页了～你平时穿多少码？我帮你对一下更稳～",
+                    },
+                    {
+                        "type": "alternative",
+                        "strategy": "场景推荐",
+                        "message": "这款很多人通勤穿，你平时上班穿得多吗？我给你简单说下特点～",
+                    },
+                    {
+                        "type": "alternative",
+                        "strategy": "舒适度保证",
+                        "message": "这款舒适，穿着很舒服，你平时穿鞋在意脚感吗？",
+                    },
+                ],
+                "send_recommendation": {
+                    "suggested": True,
+                    "best_timing": "now",
+                    "note": "用户购买意图明确，建议主动联系",
+                    "risk_level": "low",
+                    "next_step": "根据用户回复的尺码，推荐合适款式",
+                },
+                "followup_playbook": [
+                    {
+                        "condition": "顾客说尺码不确定",
+                        "reply": "你平时这类鞋穿多少码？脚背高不高？我帮你更准一点～",
+                    },
+                    {
+                        "condition": "顾客说再看看",
+                        "reply": "好的不急～你如果在意脚感或搭配，我也可以给你更具体的建议～",
+                    },
+                ],
+            },
+        }
+
+
 class SalesGraphResponse(BaseModel):
     # 响应销售流程图执行的响应模型
     """Response schema for sales graph execution."""

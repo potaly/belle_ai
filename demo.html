@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 导购执行助手 Demo - 建议系统试运行</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 自定义样式 */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        .loading-spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error-banner {
+            animation: fadeIn 0.3s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+        <!-- 使用提示 -->
+        <div id="corsWarning" class="mb-4 p-4 bg-yellow-50 border-l-4 border-yellow-500 rounded hidden">
+            <div class="flex items-center">
+                <span class="text-yellow-700 text-sm">
+                    ⚠️ 检测到跨域问题！请使用本地 HTTP 服务器运行：<code class="bg-yellow-100 px-2 py-1 rounded">python start_demo_server.py</code>
+                </span>
+                <button onclick="document.getElementById('corsWarning').classList.add('hidden')" class="ml-auto text-yellow-500 hover:text-yellow-700">×</button>
+            </div>
+        </div>
+        
+        <!-- 顶部标题栏 -->
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">AI 导购执行助手 Demo</h1>
+            <div class="flex gap-2">
+                <!-- 模拟数据填充按钮 -->
+                <button 
+                    onclick="fillMockData()" 
+                    class="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition text-sm"
+                >
+                    📋 模拟数据填充
+                </button>
+                <!-- 视图切换开关 -->
+                <label class="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg cursor-pointer">
+                    <input type="checkbox" id="techViewToggle" onchange="toggleTechView()" class="w-4 h-4">
+                    <span class="text-sm text-gray-700">技术视图</span>
+                </label>
+            </div>
+        </div>
+        <p class="text-gray-600 mb-8">建议系统试运行</p>
+
+        <!-- 错误提示条 -->
+        <div id="errorBanner" class="hidden error-banner mb-4 p-4 bg-red-50 border-l-4 border-red-500 rounded">
+            <div class="flex items-center">
+                <span class="text-red-700 font-medium" id="errorMessage"></span>
+                <button onclick="hideError()" class="ml-auto text-red-500 hover:text-red-700">×</button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- ============================================
+                 A. AI 销售建议（有行为数据）
+                 ============================================ -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">AI 销售建议（有行为数据）</h2>
+                
+                <!-- 表单区 -->
+                <div class="space-y-4 mb-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">用户 ID</label>
+                        <input 
+                            type="text" 
+                            id="userId" 
+                            value="user_002" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="输入用户 ID"
+                        >
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">商品 SKU</label>
+                        <input 
+                            type="text" 
+                            id="sku" 
+                            value="8WZ12CM2" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="输入商品 SKU"
+                        >
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input 
+                            type="checkbox" 
+                            id="useCustomPlan" 
+                            class="w-4 h-4"
+                        >
+                        <label for="useCustomPlan" class="text-sm text-gray-700">使用自定义计划</label>
+                    </div>
+                    <button 
+                        onclick="getSalesSuggestion()" 
+                        id="salesBtn"
+                        class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
+                    >
+                        <span id="salesBtnText">获取 AI 建议</span>
+                        <span id="salesBtnLoading" class="hidden inline-block ml-2">
+                            <div class="loading-spinner"></div>
+                        </span>
+                    </button>
+                </div>
+
+                <!-- 展示区 -->
+                <div id="salesResult" class="hidden">
+                    <!-- 状态标签 -->
+                    <div class="mb-4">
+                        <div id="statusBadge" class="inline-block px-3 py-1 rounded-full text-sm font-medium"></div>
+                        <div id="antiDisturbBadge" class="hidden inline-block ml-2 px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
+                            ⚠️ 触达已被反打扰拦截
+                        </div>
+                    </div>
+
+                    <!-- 推荐话术 -->
+                    <div class="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <p class="text-sm text-gray-600 mb-1">推荐话术</p>
+                                <p id="primaryMessage" class="text-gray-800 font-medium"></p>
+                            </div>
+                            <button 
+                                onclick="copyToClipboard('primaryMessage')" 
+                                class="ml-2 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition text-sm"
+                            >
+                                复制
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 为什么这么建议 -->
+                    <div class="mb-4">
+                        <p class="text-sm font-medium text-gray-700 mb-2">为什么这么建议</p>
+                        <ul id="decisionReasons" class="list-disc list-inside space-y-1 text-sm text-gray-600"></ul>
+                    </div>
+
+                    <!-- 更多参考话术（折叠面板） -->
+                    <div class="mb-4">
+                        <button 
+                            onclick="toggleAlternatives()" 
+                            class="flex items-center justify-between w-full px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
+                        >
+                            <span class="text-sm font-medium text-gray-700">更多参考话术</span>
+                            <span id="alternativesToggle" class="text-gray-500">▼</span>
+                        </button>
+                        <div id="alternativesPanel" class="hidden mt-2 space-y-2">
+                            <div id="alternativesList"></div>
+                        </div>
+                    </div>
+
+                    <!-- 跟进 SOP -->
+                    <div id="followupSOP" class="hidden mb-4">
+                        <p class="text-sm font-medium text-gray-700 mb-2">跟进 SOP</p>
+                        <div id="followupList" class="space-y-2"></div>
+                    </div>
+
+                    <!-- 页脚：耗时 -->
+                    <div class="text-xs text-gray-500 text-right">
+                        耗时: <span id="executionTime"></span> 秒
+                    </div>
+
+                    <!-- 技术视图：原始 JSON -->
+                    <div id="techViewSales" class="hidden mt-4 p-4 bg-gray-50 rounded-lg">
+                        <p class="text-xs font-mono text-gray-600 whitespace-pre-wrap" id="techViewSalesContent"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================
+                 B. 商品私聊话术（无行为数据）
+                 ============================================ -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">商品私聊话术（无行为数据）</h2>
+                
+                <!-- 表单区 -->
+                <div class="space-y-4 mb-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">商品 SKU</label>
+                        <input 
+                            type="text" 
+                            id="copySku" 
+                            value="8WZ01CM1" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="输入商品 SKU"
+                        >
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">话术风格</label>
+                        <select 
+                            id="copyStyle" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                            <option value="natural">自然</option>
+                            <option value="professional">专业</option>
+                            <option value="friendly">友好</option>
+                        </select>
+                    </div>
+                    <button 
+                        onclick="generateCopy()" 
+                        id="copyBtn"
+                        class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium"
+                    >
+                        <span id="copyBtnText">生成私聊话术</span>
+                        <span id="copyBtnLoading" class="hidden inline-block ml-2">
+                            <div class="loading-spinner"></div>
+                        </span>
+                    </button>
+                </div>
+
+                <!-- 展示区 -->
+                <div id="copyResult" class="hidden">
+                    <!-- 商品名 -->
+                    <div class="mb-4">
+                        <p class="text-sm text-gray-600 mb-1">商品名称</p>
+                        <p id="productName" class="text-lg font-semibold text-gray-800"></p>
+                    </div>
+
+                    <!-- 卖点标签 -->
+                    <div class="mb-4">
+                        <p class="text-sm text-gray-600 mb-2">商品卖点</p>
+                        <div id="sellingPoints" class="flex flex-wrap gap-2"></div>
+                    </div>
+
+                    <!-- 候选话术 -->
+                    <div>
+                        <p class="text-sm font-medium text-gray-700 mb-2">候选话术</p>
+                        <div id="copyCandidates" class="space-y-3"></div>
+                    </div>
+
+                    <!-- 技术视图：原始 JSON -->
+                    <div id="techViewCopy" class="hidden mt-4 p-4 bg-gray-50 rounded-lg">
+                        <p class="text-xs font-mono text-gray-600 whitespace-pre-wrap" id="techViewCopyContent"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <div id="toast" class="hidden toast">
+        <div class="bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg">
+            <span id="toastMessage">已复制</span>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000';
+
+        // ============================================
+        // 工具函数
+        // ============================================
+
+        /**
+         * 显示错误提示
+         */
+        function showError(message) {
+            const banner = document.getElementById('errorBanner');
+            const messageEl = document.getElementById('errorMessage');
+            messageEl.textContent = message;
+            banner.classList.remove('hidden');
+        }
+
+        /**
+         * 隐藏错误提示
+         */
+        function hideError() {
+            document.getElementById('errorBanner').classList.add('hidden');
+        }
+
+        /**
+         * 显示 Toast 提示
+         */
+        function showToast(message = '已复制') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            toastMessage.textContent = message;
+            toast.classList.remove('hidden');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 2000);
+        }
+
+        /**
+         * 复制到剪贴板
+         */
+        async function copyToClipboard(elementId) {
+            const element = document.getElementById(elementId);
+            const text = element.textContent.trim();
+            try {
+                await navigator.clipboard.writeText(text);
+                showToast('已复制');
+            } catch (err) {
+                showError('复制失败，请手动复制');
+            }
+        }
+
+        /**
+         * 复制指定文本
+         */
+        async function copyText(text) {
+            try {
+                await navigator.clipboard.writeText(text);
+                showToast('已复制');
+            } catch (err) {
+                showError('复制失败，请手动复制');
+            }
+        }
+
+        /**
+         * 设置加载状态
+         */
+        function setLoading(buttonId, isLoading) {
+            const btn = document.getElementById(buttonId);
+            const btnText = document.getElementById(buttonId + 'Text');
+            const btnLoading = document.getElementById(buttonId + 'Loading');
+            
+            if (isLoading) {
+                btn.disabled = true;
+                btn.classList.add('opacity-75', 'cursor-not-allowed');
+                btnText.classList.add('hidden');
+                btnLoading.classList.remove('hidden');
+            } else {
+                btn.disabled = false;
+                btn.classList.remove('opacity-75', 'cursor-not-allowed');
+                btnText.classList.remove('hidden');
+                btnLoading.classList.add('hidden');
+            }
+        }
+
+        /**
+         * 切换技术视图
+         */
+        function toggleTechView() {
+            const isTechView = document.getElementById('techViewToggle').checked;
+            document.getElementById('techViewSales').classList.toggle('hidden', !isTechView);
+            document.getElementById('techViewCopy').classList.toggle('hidden', !isTechView);
+        }
+
+        /**
+         * 模拟数据填充
+         */
+        function fillMockData() {
+            // 填充销售建议表单
+            document.getElementById('userId').value = 'user_002';
+            document.getElementById('sku').value = '8WZ12CM2';
+            document.getElementById('useCustomPlan').checked = false;
+            
+            // 填充商品话术表单
+            document.getElementById('copySku').value = '8WZ01CM1';
+            document.getElementById('copyStyle').value = 'natural';
+            
+            showToast('已填充模拟数据');
+        }
+
+        /**
+         * 切换更多参考话术面板
+         */
+        function toggleAlternatives() {
+            const panel = document.getElementById('alternativesPanel');
+            const toggle = document.getElementById('alternativesToggle');
+            const isHidden = panel.classList.contains('hidden');
+            
+            panel.classList.toggle('hidden', !isHidden);
+            toggle.textContent = isHidden ? '▲' : '▼';
+        }
+
+        /**
+         * 处理决策原因（拆分成 bullet points）
+         */
+        function formatDecisionReason(reason) {
+            if (!reason) return [];
+            
+            // 按分号、句号、换行符分割
+            const parts = reason.split(/[；。\n]/).filter(p => p.trim());
+            
+            // 如果分割后只有一条，尝试按逗号分割
+            if (parts.length === 1) {
+                const commaParts = reason.split(/，/).filter(p => p.trim());
+                return commaParts.length > 1 ? commaParts : parts;
+            }
+            
+            return parts;
+        }
+
+        // ============================================
+        // A. AI 销售建议
+        // ============================================
+
+        /**
+         * 检测是否使用 file:// 协议（会有跨域问题）
+         */
+        function checkCorsIssue() {
+            if (window.location.protocol === 'file:') {
+                document.getElementById('corsWarning').classList.remove('hidden');
+            }
+        }
+
+        /**
+         * 获取 AI 销售建议
+         */
+        async function getSalesSuggestion() {
+            hideError();
+            setLoading('salesBtn', true);
+            
+            const userId = document.getElementById('userId').value.trim();
+            const sku = document.getElementById('sku').value.trim();
+            const useCustomPlan = document.getElementById('useCustomPlan').checked;
+            
+            if (!userId || !sku) {
+                showError('请填写用户 ID 和商品 SKU');
+                setLoading('salesBtn', false);
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/ai/sales/graph`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        sku: sku,
+                        use_custom_plan: useCustomPlan,
+                    }),
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ message: '请求失败' }));
+                    throw new Error(errorData.message || `HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (!data.success || !data.data) {
+                    throw new Error(data.message || '返回数据格式错误');
+                }
+                
+                displaySalesResult(data.data);
+                
+                // 技术视图：保存原始 JSON
+                if (document.getElementById('techViewToggle').checked) {
+                    document.getElementById('techViewSalesContent').textContent = JSON.stringify(data, null, 2);
+                }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                // 更详细的错误诊断
+                let errorMsg = `请求失败: ${error.message}`;
+                
+                if (error.message.includes('Failed to fetch')) {
+                    // 可能是网络错误、CORS 或后端未运行
+                    errorMsg = `请求失败：无法连接到后端 API (${API_BASE})。请检查：\n1. 后端服务是否运行在 http://127.0.0.1:8000\n2. 后端是否配置了 CORS 允许跨域请求`;
+                } else if (error.message.includes('CORS')) {
+                    errorMsg = '请求失败：跨域问题。请确保后端配置了 CORS 允许跨域请求';
+                }
+                
+                showError(errorMsg);
+            } finally {
+                setLoading('salesBtn', false);
+            }
+        }
+
+        /**
+         * 展示销售建议结果
+         */
+        function displaySalesResult(data) {
+            const resultDiv = document.getElementById('salesResult');
+            resultDiv.classList.remove('hidden');
+            
+            // 状态标签
+            const statusBadge = document.getElementById('statusBadge');
+            const antiDisturbBadge = document.getElementById('antiDisturbBadge');
+            
+            if (data.allowed) {
+                statusBadge.className = 'inline-block px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800';
+                statusBadge.textContent = '✓ AI 建议：可以联系客户';
+            } else {
+                statusBadge.className = 'inline-block px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800';
+                statusBadge.textContent = '○ AI 建议：暂不联系客户';
+            }
+            
+            // 反打扰拦截提示
+            if (data.anti_disturb_blocked) {
+                antiDisturbBadge.classList.remove('hidden');
+            } else {
+                antiDisturbBadge.classList.add('hidden');
+            }
+            
+            // 推荐话术（优先使用 final_message，否则使用 message_pack primary）
+            const primaryMessage = data.final_message || 
+                (data.sales_suggestion?.message_pack?.find(m => m.type === 'primary')?.message) ||
+                '暂无推荐话术';
+            document.getElementById('primaryMessage').textContent = primaryMessage;
+            
+            // 为什么这么建议
+            const reasons = formatDecisionReason(data.decision_reason || '');
+            const reasonsList = document.getElementById('decisionReasons');
+            reasonsList.innerHTML = '';
+            if (reasons.length > 0) {
+                reasons.forEach(reason => {
+                    const li = document.createElement('li');
+                    li.textContent = reason.trim();
+                    reasonsList.appendChild(li);
+                });
+            } else {
+                const li = document.createElement('li');
+                li.textContent = '暂无原因说明';
+                reasonsList.appendChild(li);
+            }
+            
+            // 更多参考话术
+            const alternatives = data.sales_suggestion?.message_pack?.filter(m => m.type === 'alternative') || [];
+            const alternativesList = document.getElementById('alternativesList');
+            alternativesList.innerHTML = '';
+            
+            if (alternatives.length > 0) {
+                alternatives.slice(0, 2).forEach((alt, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'p-3 bg-gray-50 rounded-lg border border-gray-200';
+                    div.innerHTML = `
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <p class="text-xs text-gray-500 mb-1">备选 ${index + 1}</p>
+                                <p class="text-sm text-gray-800">${alt.message}</p>
+                            </div>
+                            <button 
+                                onclick="copyText('${alt.message.replace(/'/g, "\\'")}')" 
+                                class="ml-2 px-2 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 transition text-xs"
+                            >
+                                复制
+                            </button>
+                        </div>
+                    `;
+                    alternativesList.appendChild(div);
+                });
+            } else {
+                alternativesList.innerHTML = '<p class="text-sm text-gray-500">暂无更多参考话术</p>';
+            }
+            
+            // 跟进 SOP
+            const followupSOP = document.getElementById('followupSOP');
+            const followupList = document.getElementById('followupList');
+            followupList.innerHTML = '';
+            
+            const playbook = data.sales_suggestion?.followup_playbook || [];
+            if (playbook.length > 0) {
+                followupSOP.classList.remove('hidden');
+                playbook.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'p-3 bg-blue-50 rounded-lg border border-blue-200';
+                    div.innerHTML = `
+                        <div class="mb-2">
+                            <span class="text-xs font-medium text-blue-700">如果：</span>
+                            <span class="text-sm text-gray-800">${item.condition}</span>
+                        </div>
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <span class="text-xs font-medium text-blue-700">回复：</span>
+                                <span class="text-sm text-gray-800">${item.reply}</span>
+                            </div>
+                            <button 
+                                onclick="copyText('${item.reply.replace(/'/g, "\\'")}')" 
+                                class="ml-2 px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition text-xs"
+                            >
+                                复制
+                            </button>
+                        </div>
+                    `;
+                    followupList.appendChild(div);
+                });
+            } else {
+                followupSOP.classList.add('hidden');
+            }
+            
+            // 耗时
+            const executionTime = data.execution_time_seconds || 0;
+            document.getElementById('executionTime').textContent = executionTime.toFixed(2);
+        }
+
+        // ============================================
+        // B. 商品私聊话术
+        // ============================================
+
+        /**
+         * 生成商品私聊话术
+         */
+        async function generateCopy() {
+            hideError();
+            setLoading('copyBtn', true);
+            
+            const sku = document.getElementById('copySku').value.trim();
+            const style = document.getElementById('copyStyle').value;
+            
+            if (!sku) {
+                showError('请填写商品 SKU');
+                setLoading('copyBtn', false);
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/ai/generate/copy`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        sku: sku,
+                        style: style,
+                        scene: 'guide_chat',
+                        character_limit: 45,
+                    }),
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ message: '请求失败' }));
+                    throw new Error(errorData.message || `HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                displayCopyResult(data);
+                
+                // 技术视图：保存原始 JSON
+                if (document.getElementById('techViewToggle').checked) {
+                    document.getElementById('techViewCopyContent').textContent = JSON.stringify(data, null, 2);
+                }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                // 更详细的错误诊断
+                let errorMsg = `请求失败: ${error.message}`;
+                
+                if (error.message.includes('Failed to fetch')) {
+                    // 可能是网络错误、CORS 或后端未运行
+                    errorMsg = `请求失败：无法连接到后端 API (${API_BASE})。请检查：\n1. 后端服务是否运行在 http://127.0.0.1:8000\n2. 后端是否配置了 CORS 允许跨域请求`;
+                } else if (error.message.includes('CORS')) {
+                    errorMsg = '请求失败：跨域问题。请确保后端配置了 CORS 允许跨域请求';
+                }
+                
+                showError(errorMsg);
+            } finally {
+                setLoading('copyBtn', false);
+            }
+        }
+
+        // 页面加载时检测跨域问题
+        window.addEventListener('DOMContentLoaded', checkCorsIssue);
+
+        /**
+         * 展示商品话术结果
+         */
+        function displayCopyResult(data) {
+            const resultDiv = document.getElementById('copyResult');
+            resultDiv.classList.remove('hidden');
+            
+            // 商品名
+            document.getElementById('productName').textContent = data.product_name || '未知商品';
+            
+            // 卖点标签
+            const sellingPointsDiv = document.getElementById('sellingPoints');
+            sellingPointsDiv.innerHTML = '';
+            const sellingPoints = data.selling_points || [];
+            if (sellingPoints.length > 0) {
+                sellingPoints.forEach(point => {
+                    const span = document.createElement('span');
+                    span.className = 'px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs';
+                    span.textContent = point;
+                    sellingPointsDiv.appendChild(span);
+                });
+            } else {
+                sellingPointsDiv.innerHTML = '<span class="text-sm text-gray-500">暂无卖点</span>';
+            }
+            
+            // 候选话术
+            const candidatesDiv = document.getElementById('copyCandidates');
+            candidatesDiv.innerHTML = '';
+            const candidates = data.copy_candidates || [];
+            
+            if (candidates.length > 0) {
+                candidates.forEach((candidate, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'p-4 bg-green-50 rounded-lg border border-green-200';
+                    div.innerHTML = `
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <p class="text-xs text-gray-500 mb-1">候选 ${index + 1}</p>
+                                <p class="text-sm text-gray-800">${candidate.message}</p>
+                            </div>
+                            <button 
+                                onclick="copyText('${candidate.message.replace(/'/g, "\\'")}')" 
+                                class="ml-2 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition text-sm"
+                            >
+                                复制
+                            </button>
+                        </div>
+                    `;
+                    candidatesDiv.appendChild(div);
+                });
+            } else {
+                candidatesDiv.innerHTML = '<p class="text-sm text-gray-500">暂无候选话术</p>';
+            }
+        }
+    </script>
+</body>
+</html>
+
