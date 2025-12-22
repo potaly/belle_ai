@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, BigInteger, DateTime, Index, String, Text, func
+from sqlalchemy import JSON, BigInteger, DateTime, Index, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import DECIMAL
 
@@ -22,12 +22,16 @@ class Product(Base):
         autoincrement=True,
         comment="商品主键ID",
     )
+    brand_code: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        comment="品牌代码，与 sku 组成业务主键",
+    )
     sku: Mapped[str] = mapped_column(
         String(64),
         nullable=False,
-        unique=True,
         index=True,
-        comment="商品SKU编码，唯一标识",
+        comment="商品SKU编码，与 brand_code 组成业务主键",
     )
     name: Mapped[str] = mapped_column(
         String(255),
@@ -73,10 +77,11 @@ class Product(Base):
     )
 
     __table_args__ = (
+        UniqueConstraint("brand_code", "sku", name="idx_products_brand_sku"),
         Index("idx_products_sku", "sku"),
         {"comment": "商品信息表"},
     )
 
     def __repr__(self) -> str:
-        return f"<Product(id={self.id}, sku='{self.sku}', name='{self.name}')>"
+        return f"<Product(id={self.id}, brand_code='{self.brand_code}', sku='{self.sku}', name='{self.name}')>"
 
