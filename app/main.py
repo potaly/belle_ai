@@ -10,6 +10,7 @@ from app.api.v1 import (
     followup as followup_router,
     intent as intent_router,
     product as product_router,
+    product_vision as product_vision_router,
     rag_debug as rag_debug_router,
     sales_graph as sales_graph_router,
     vector_search as vector_search_router,
@@ -105,6 +106,7 @@ app.add_middleware(
 app.include_router(v1_router)
 app.include_router(copy_router.router)
 app.include_router(product_router.router)
+app.include_router(product_vision_router.router)  # V6.0.0: 拍照识图API
 app.include_router(vector_search_router.router)  # V2: 向量搜索API
 app.include_router(rag_debug_router.router)  # V2: RAG 调试端点（仅 DEBUG 模式）
 app.include_router(intent_router.router)  # V3: 意图分析API

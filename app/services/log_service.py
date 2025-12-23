@@ -103,3 +103,63 @@ async def log_ai_task(
     
     return task_id
 
+
+async def log_vision_analyze_called(
+    brand_code: str,
+    scene: str,
+    vision_used: bool,
+    latency_ms: Optional[int] = None,
+) -> None:
+    """
+    埋点：视觉分析接口被调用。
+    
+    Args:
+        brand_code: 品牌编码
+        scene: 使用场景
+        vision_used: 是否使用了视觉模型
+        latency_ms: 耗时（毫秒）
+    """
+    await log_ai_task(
+        scene_type="vision_analyze_called",
+        input_data={
+            "brand_code": brand_code,
+            "scene": scene,
+            "vision_used": vision_used,
+        },
+        latency_ms=latency_ms,
+    )
+
+
+async def log_guide_copy_generated(
+    brand_code: str,
+    scene: str,
+    primary_copy: str,
+    alternatives_count: int,
+    vision_used: bool,
+    latency_ms: Optional[int] = None,
+) -> None:
+    """
+    埋点：导购话术生成。
+    
+    Args:
+        brand_code: 品牌编码
+        scene: 使用场景
+        primary_copy: 主要话术
+        alternatives_count: 备选话术数量
+        vision_used: 是否使用了视觉模型
+        latency_ms: 耗时（毫秒）
+    """
+    await log_ai_task(
+        scene_type="guide_copy_generated",
+        input_data={
+            "brand_code": brand_code,
+            "scene": scene,
+            "vision_used": vision_used,
+        },
+        output_result={
+            "primary_copy": primary_copy,
+            "alternatives_count": alternatives_count,
+        },
+        latency_ms=latency_ms,
+    )
+
