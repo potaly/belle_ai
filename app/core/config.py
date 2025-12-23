@@ -70,6 +70,12 @@ class Settings(BaseSettings):
     
     # Copy generation settings (V5.3.0+)
     copy_max_length: int = 45  # Maximum length for private-chat sales copy (characters)
+    
+    # Vision model settings (V6.0.0+)
+    vision_model: str = "qwen-vl-max"  # Vision model name
+    vision_api_key: str | None = None  # Vision model API key
+    vision_base_url: str | None = None  # Vision model base URL
+    use_mock_vision: bool = False  # Use mock vision provider (for testing)
 
     class Config:
         env_file = ".env"
