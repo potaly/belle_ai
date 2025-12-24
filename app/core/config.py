@@ -55,6 +55,8 @@ class Settings(BaseSettings):
 
     # Logging settings
     log_level: str = "info"  # debug, info, warning, error
+    log_dir: str = "logs"  # Log directory (default: ./logs)
+    log_backup_count: int = 14  # Log file backup count (days, default: 14)
 
     # Debug settings
     debug: bool = False  # Enable debug mode (DEBUG=true in .env)
