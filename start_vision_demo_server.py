@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""简单的本地 HTTP 服务器，用于运行 demo.html
+"""简单的本地 HTTP 服务器，用于运行 demo_vision_similar.html
 
 使用方法：
-    python start_demo_server.py
+    python start_vision_demo_server.py
 
 然后在浏览器访问：
-    http://127.0.0.1:8080/demo.html
+    http://127.0.0.1:8080/demo_vision_similar.html
 """
 import http.server
 import socketserver
@@ -34,21 +34,19 @@ def main():
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     
     with socketserver.TCPServer(("", PORT), MyHTTPRequestHandler) as httpd:
-        demo_url = f"http://127.0.0.1:{PORT}/demo.html"
-        vision_demo_url = f"http://127.0.0.1:{PORT}/demo_vision_similar.html"
+        url = f"http://127.0.0.1:{PORT}/demo_vision_similar.html"
         print("=" * 60)
-        print("🚀 Demo 服务器已启动！")
+        print("🚀 Vision Demo 服务器已启动！")
         print("=" * 60)
-        print(f"📱 销售建议 Demo: {demo_url}")
-        print(f"📱 拍照识图 Demo: {vision_demo_url}")
+        print(f"📱 访问地址: {url}")
         print(f"🔧 API 后端: http://127.0.0.1:8000")
         print("=" * 60)
         print("按 Ctrl+C 停止服务器")
         print("=" * 60)
         
-        # 自动打开浏览器（默认打开销售建议 Demo）
+        # 自动打开浏览器
         try:
-            webbrowser.open(demo_url)
+            webbrowser.open(url)
         except:
             pass
         

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,94 @@ def build_vision_system_prompt() -> str:
    - 长度控制在30-50字
 
 请严格按照以上要求输出 JSON 格式。"""
+
+
+def build_vision_analyze_prompts(
+    image_url_or_bytes: str,
+    brand_no: str,
+    scene: str,
+    allowed_enums: Dict[str, List[str]],
+) -> tuple[str, str]:
+    """
+    构建包含枚举约束的 vision analyze prompts（P4.x.1）。
+    
+    Args:
+        image_url_or_bytes: 图片URL或Base64编码
+        brand_no: 品牌编码
+        scene: 使用场景（固定为 guide_chat）
+        allowed_enums: 允许的枚举值字典，包含：
+            - categories: List[str]
+            - styles: List[str]
+            - seasons: List[str]
+            - colors: List[str]
+            - genders: List[str] (可选)
+    
+    Returns:
+        Tuple of (system_prompt, user_prompt)
+    """
+    # System Prompt（固定）
+    system_prompt = """你是鞋服零售行业的商品识别助手。
+
+【强制规则】
+1) 你必须输出严格 JSON，且字段必须完全符合给定 Schema。
+2) category 必须且只能从 allowed_categories 中选择一个值；禁止输出任何不在列表中的词。
+3) season 必须且只能从 allowed_seasons 中选择一个值；禁止输出四季/春夏秋冬之外的词。
+4) style 必须从 allowed_styles 中选择（最多 3 个）。
+5) color 必须从 allowed_colors 中选择一个；colors 为颜色数组（可以 1~2 个）。
+6) 你必须显式输出结构特征 structure_signals，用于业务规则兜底：
+   open_heel/open_toe/heel_height/toe_shape。
+7) 若不确定，请在 allowed_categories 中选择最接近且最保守的类目，并在 confidence_note 解释原因。"""
+
+    # User Prompt（动态注入枚举）
+    allowed_categories = allowed_enums.get("categories", [])
+    allowed_seasons = allowed_enums.get("seasons", [])
+    allowed_styles = allowed_enums.get("styles", [])
+    allowed_colors = allowed_enums.get("colors", [])
+    allowed_genders = allowed_enums.get("genders", [])
+
+    user_prompt = f"""请分析这张鞋子的照片，生成导购私聊话术。
+
+**图片**：{image_url_or_bytes}
+**品牌**：{brand_no}
+**场景**：{scene}
+
+【允许的枚举值（必须严格遵守）】
+- allowed_categories: {allowed_categories}
+- allowed_seasons: {allowed_seasons}
+- allowed_styles: {allowed_styles}
+- allowed_colors: {allowed_colors}
+{f"- allowed_genders: {allowed_genders}" if allowed_genders else ""}
+
+请按照以下 JSON 格式输出（不得输出额外文本）：
+
+{{
+  "category": "<必须从 allowed_categories 选>",
+  "season": "<必须从 allowed_seasons 选>",
+  "color": "<必须从 allowed_colors 选>",
+  "colors": ["<allowed_colors>"],
+  "style": ["<allowed_styles>"],
+  "structure_signals": {{
+    "open_heel": true/false,
+    "open_toe": true/false,
+    "heel_height": "flat|low|mid|high|unknown",
+    "toe_shape": "round|square|pointed|unknown"
+  }},
+  "selling_points": ["3条客观卖点，中文"],
+  "guide_chat_copy": {{
+    "primary": "<=45字、私聊语气、带轻引导提问",
+    "alternatives": ["2~3条备选"]
+  }},
+  "confidence": "low|medium|high",
+  "confidence_note": "一句话"
+}}
+
+【重要提醒】
+- category/season/style/color 必须严格从 allowed 列表中选择
+- structure_signals 必须准确判断（用于业务规则兜底）
+- primary 必须包含轻提问式引导（如"平时...还是...？"）
+- 只基于图片外观判断，不要编造材质/功能"""
+
+    return system_prompt, user_prompt
 
 
 def build_vision_user_prompt(image_url: str, brand_code: str) -> str:

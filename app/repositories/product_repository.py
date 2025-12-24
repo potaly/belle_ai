@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -167,4 +167,93 @@ def upsert_product_by_brand_and_sku(
     
     logger.info(f"[REPOSITORY] ✓ Product upserted: id={product.id}")
     return product
+
+
+def get_candidate_products_by_brand(
+    db: Session,
+    brand_code: str,
+    category: Optional[str] = None,
+    limit: int = 300,
+    check_on_sale: bool = True,
+) -> List[Product]:
+    """
+    获取候选商品列表（用于相似度检索）。
+    
+    业务规则：
+    1. 必选过滤：brand_code = input.brand_code
+    2. 可选过滤：category 精确匹配（如果提供）
+    3. on_sale 过滤：如果表中有 on_sale 字段且 check_on_sale=True
+    4. 限制数量：limit（默认300，避免全表扫描）
+    5. 排序：按 updated_at desc 或 id desc
+    
+    Args:
+        db: Database session
+        brand_code: Brand code (required)
+        category: Category filter (optional)
+        limit: Maximum number of candidates (default 300)
+        check_on_sale: Whether to filter by on_sale=1 (default True)
+    
+    Returns:
+        List of Product instances
+    """
+    logger.info(
+        f"[REPOSITORY] Querying candidate products: brand_code={brand_code}, "
+        f"category={category}, limit={limit}, check_on_sale={check_on_sale}"
+    )
+    
+    query = db.query(Product).filter(Product.brand_code == brand_code)
+    
+    # Category filter (if provided)
+    # Note: Product model doesn't have category column, we'll filter in Python
+    # This is handled in the service layer after fetching candidates
+    
+    # on_sale filter (if column exists and check_on_sale=True)
+    if check_on_sale:
+        try:
+            # Check if on_sale column exists
+            result = db.execute(text("SHOW COLUMNS FROM products LIKE 'on_sale'"))
+            if result.fetchone():
+                query = query.filter(text("on_sale = 1"))
+                logger.debug("[REPOSITORY] Applied on_sale=1 filter")
+        except Exception as e:
+            logger.debug(f"[REPOSITORY] on_sale column check failed: {e}, skipping filter")
+    
+    # Order by updated_at desc (or id desc as fallback)
+    try:
+        query = query.order_by(Product.updated_at.desc())
+    except AttributeError:
+        query = query.order_by(Product.id.desc())
+    
+    # Limit
+    products = query.limit(limit).all()
+    
+    # Log sample product info for debugging (after products is fetched)
+    if products:
+        sample_product = products[0]
+        logger.debug(
+            f"[REPOSITORY] Sample product: sku={sample_product.sku}, "
+            f"name={sample_product.name[:50] if sample_product.name else 'N/A'}, "
+            f"tags={sample_product.tags}, "
+            f"attributes_keys={list(sample_product.attributes.keys()) if sample_product.attributes else []}"
+        )
+    
+    # If category filter was not applied at DB level, filter in Python
+    if category:
+        filtered_products = []
+        for product in products:
+            # Check category from column or attributes
+            product_category = None
+            if hasattr(product, "category") and product.category:
+                product_category = product.category
+            elif product.attributes:
+                product_category = product.attributes.get("category") or product.attributes.get("类目")
+            
+            if product_category and category in str(product_category):
+                filtered_products.append(product)
+        
+        products = filtered_products
+        logger.debug(f"[REPOSITORY] Filtered by category in Python: {len(products)} products")
+    
+    logger.info(f"[REPOSITORY] ✓ Found {len(products)} candidate products")
+    return products
 

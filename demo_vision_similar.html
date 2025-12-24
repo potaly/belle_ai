@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 智能导购演示 - 拍照识图 + 相似商品推荐</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+            background: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 40px;
+        }
+
+        h1 {
+            font-size: 28px;
+            color: #1a1a1a;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 40px;
+        }
+
+        .section {
+            margin-bottom: 40px;
+            padding: 24px;
+            background: #fafbfc;
+            border-radius: 6px;
+            border-left: 4px solid #1890ff;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 18px;
+            background: #1890ff;
+            margin-right: 8px;
+            border-radius: 2px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        input[type="text"],
+        input[type="file"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #1890ff;
+        }
+
+        .image-input-group {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .image-input-group > div {
+            flex: 1;
+        }
+
+        .divider {
+            text-align: center;
+            color: #999;
+            margin: 12px 0;
+            font-size: 12px;
+        }
+
+        .btn {
+            padding: 10px 24px;
+            background: #1890ff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.3s;
+            min-width: 120px;
+        }
+
+        .btn:hover:not(:disabled) {
+            background: #40a9ff;
+        }
+
+        .btn:disabled {
+            background: #d9d9d9;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #52c41a;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #73d13d;
+        }
+
+        .loading {
+            display: inline-block;
+            margin-left: 8px;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .result-box {
+            background: white;
+            border: 1px solid #e8e8e8;
+            border-radius: 6px;
+            padding: 20px;
+            margin-top: 16px;
+        }
+
+        .result-section {
+            margin-bottom: 24px;
+        }
+
+        .result-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .result-label {
+            font-size: 13px;
+            color: #999;
+            margin-bottom: 6px;
+        }
+
+        .result-value {
+            font-size: 15px;
+            color: #1a1a1a;
+            word-break: break-word;
+        }
+
+        .result-value.trace-id {
+            font-family: 'Courier New', monospace;
+            background: #f0f0f0;
+            padding: 8px 12px;
+            border-radius: 4px;
+            color: #1890ff;
+            font-weight: 500;
+        }
+
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #e6f7ff;
+            color: #1890ff;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .selling-points-list {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .selling-points-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+            color: #333;
+        }
+
+        .selling-points-list li:last-child {
+            border-bottom: none;
+        }
+
+        .selling-points-list li::before {
+            content: '•';
+            color: #1890ff;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .copy-btn {
+            margin-left: 8px;
+            padding: 4px 8px;
+            background: #f0f0f0;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .copy-btn:hover {
+            background: #e0e0e0;
+        }
+
+        .similar-skus-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+        }
+
+        .similar-skus-table th,
+        .similar-skus-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .similar-skus-table th {
+            background: #fafafa;
+            font-weight: 600;
+            color: #666;
+            font-size: 13px;
+        }
+
+        .similar-skus-table td {
+            color: #333;
+            font-size: 14px;
+        }
+
+        .similar-skus-table tr:hover {
+            background: #fafafa;
+        }
+
+        .rank-badge {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            line-height: 24px;
+            text-align: center;
+            background: #1890ff;
+            color: white;
+            border-radius: 50%;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .rank-badge.top1 { background: #ff4d4f; }
+        .rank-badge.top2 { background: #ff7a45; }
+        .rank-badge.top3 { background: #ffa940; }
+
+        .hidden {
+            display: none;
+        }
+
+        .error-message {
+            color: #ff4d4f;
+            font-size: 14px;
+            margin-top: 8px;
+        }
+
+        .success-message {
+            color: #52c41a;
+            font-size: 14px;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI 智能导购演示（Demo）</h1>
+        <p class="subtitle">拍照识图 → 卖点解析 → 相似商品推荐</p>
+
+        <!-- Step 1: 输入区 -->
+        <div class="section">
+            <div class="section-title">Step 1：输入区</div>
+            
+            <div class="form-group">
+                <label>品牌编码 (brand_no)</label>
+                <input type="text" id="brandNo" value="50LY" placeholder="请输入品牌编码">
+            </div>
+
+            <div class="form-group">
+                <label>图片输入方式</label>
+                <div class="image-input-group">
+                    <div>
+                        <label style="font-size: 13px;">方式一：图片 URL</label>
+                        <input type="text" id="imageUrl" placeholder="https://example.com/image.jpg">
+                    </div>
+                    <div>
+                        <label style="font-size: 13px;">方式二：本地图片上传</label>
+                        <input type="file" id="imageFile" accept="image/*">
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn" id="analyzeBtn" onclick="analyzeImage()">
+                ① 识图分析
+            </button>
+            <div id="analyzeStatus" class="hidden"></div>
+        </div>
+
+        <!-- Step 2: 识图分析结果 -->
+        <div class="section hidden" id="visionResultSection">
+            <div class="section-title">Step 2：识图分析结果</div>
+            <div class="result-box" id="visionResult">
+                <!-- 动态填充 -->
+            </div>
+        </div>
+
+        <!-- Step 3: 相似商品推荐 -->
+        <div class="section hidden" id="similarSection">
+            <div class="section-title">Step 3：相似商品推荐</div>
+            <button class="btn btn-secondary" id="similarBtn" onclick="findSimilarSKUs()">
+                ② 查找相似商品
+            </button>
+            <div id="similarStatus" class="hidden"></div>
+        </div>
+
+        <!-- Step 4: 相似商品结果 -->
+        <div class="section hidden" id="similarResultSection">
+            <div class="section-title">Step 4：相似商品结果</div>
+            <div class="result-box">
+                <p style="color: #666; font-size: 14px; margin-bottom: 16px;">
+                    基于图片视觉特征 + 向量检索的相似商品推荐
+                </p>
+                <div id="similarResult">
+                    <!-- 动态填充 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000';
+
+        // 图片文件转 Base64
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const base64 = reader.result;
+                    resolve(base64);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // 复制到剪贴板
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('已复制到剪贴板');
+            }).catch(() => {
+                // 降级方案
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                alert('已复制到剪贴板');
+            });
+        }
+
+        // 设置按钮加载状态
+        function setButtonLoading(btnId, loading) {
+            const btn = document.getElementById(btnId);
+            if (loading) {
+                btn.disabled = true;
+                btn.innerHTML = btn.innerHTML.replace(/①|②/, '') + '<span class="loading"></span>';
+            } else {
+                btn.disabled = false;
+                const originalText = btnId === 'analyzeBtn' ? '① 识图分析' : '② 查找相似商品';
+                btn.innerHTML = originalText;
+            }
+        }
+
+        // 显示状态消息
+        function showStatus(elementId, message, isError = false) {
+            const element = document.getElementById(elementId);
+            element.className = isError ? 'error-message' : 'success-message';
+            element.textContent = message;
+            element.classList.remove('hidden');
+        }
+
+        // 隐藏状态消息
+        function hideStatus(elementId) {
+            document.getElementById(elementId).classList.add('hidden');
+        }
+
+        // 滚动到元素
+        function scrollToElement(elementId) {
+            document.getElementById(elementId).scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // ① 识图分析
+        async function analyzeImage() {
+            const brandNo = document.getElementById('brandNo').value.trim();
+            const imageUrl = document.getElementById('imageUrl').value.trim();
+            const imageFile = document.getElementById('imageFile').files[0];
+
+            if (!brandNo) {
+                alert('请输入品牌编码');
+                return;
+            }
+
+            if (!imageUrl && !imageFile) {
+                alert('请提供图片 URL 或上传本地图片');
+                return;
+            }
+
+            setButtonLoading('analyzeBtn', true);
+            hideStatus('analyzeStatus');
+
+            try {
+                let imageInput = imageUrl;
+                if (imageFile) {
+                    imageInput = await fileToBase64(imageFile);
+                }
+
+                const response = await fetch(`${API_BASE}/ai/product/vision_analyze`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        image: imageInput,
+                        brand_code: brandNo,
+                        scene: 'guide_chat'
+                    })
+                });
+
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.message || '识图分析失败');
+                }
+
+                // 显示结果
+                displayVisionResult(result.data);
+                
+                // 显示 Step 3
+                document.getElementById('similarSection').classList.remove('hidden');
+                
+                // 滚动到结果区域
+                setTimeout(() => scrollToElement('visionResultSection'), 300);
+
+            } catch (error) {
+                showStatus('analyzeStatus', `错误: ${error.message}`, true);
+                alert(`识图分析失败: ${error.message}`);
+            } finally {
+                setButtonLoading('analyzeBtn', false);
+            }
+        }
+
+        // 显示识图分析结果
+        function displayVisionResult(data) {
+            const container = document.getElementById('visionResult');
+            
+            const visualSummary = data.visual_summary || {};
+            const sellingPoints = data.selling_points || [];
+            const guideChatCopy = data.guide_chat_copy || {};
+            const traceId = data.trace_id || '';
+            const structureSignals = data.structure_signals || {};
+            const resolverDebug = data.resolver_debug || {};
+
+            let html = `
+                <div class="result-section">
+                    <div class="result-label">视觉识别摘要</div>
+                    <div class="result-value">
+                        <div style="margin-bottom: 8px;"><strong>类目：</strong>${visualSummary.category_guess || '未知'}</div>
+                        <div style="margin-bottom: 8px;"><strong>季节：</strong>${visualSummary.season_impression || '未知'}</div>
+                        <div style="margin-bottom: 8px;"><strong>颜色：</strong>${visualSummary.color_impression || '未知'}</div>
+                        <div style="margin-bottom: 8px;"><strong>风格：</strong>
+                            <div class="tag-list">
+                                ${(visualSummary.style_impression || []).map(s => `<span class="tag">${s}</span>`).join('')}
+                            </div>
+                        </div>
+                        ${structureSignals.open_heel ? '<div style="margin-top: 8px;"><strong>结构特征：</strong>后空</div>' : ''}
+                        ${structureSignals.open_toe ? '<div><strong>结构特征：</strong>前空</div>' : ''}
+                    </div>
+                </div>
+
+                <div class="result-section">
+                    <div class="result-label">商品卖点</div>
+                    <ul class="selling-points-list">
+                        ${sellingPoints.map(sp => `<li>${sp}</li>`).join('')}
+                    </ul>
+                </div>
+
+                <div class="result-section">
+                    <div class="result-label">导购私聊话术</div>
+                    <div style="margin-bottom: 12px;">
+                        <strong>主推荐：</strong>
+                        <span class="result-value">${guideChatCopy.primary || '无'}</span>
+                        <button class="copy-btn" onclick="copyToClipboard('${(guideChatCopy.primary || '').replace(/'/g, "\\'")}')">复制</button>
+                    </div>
+                    <div>
+                        <strong>备选话术：</strong>
+                        <ul class="selling-points-list" style="margin-top: 8px;">
+                            ${(guideChatCopy.alternatives || []).map(alt => `
+                                <li>
+                                    ${alt}
+                                    <button class="copy-btn" onclick="copyToClipboard('${alt.replace(/'/g, "\\'")}')">复制</button>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="result-section">
+                    <div class="result-label">追踪 ID (trace_id)</div>
+                    <div class="result-value trace-id" id="traceId">${traceId}</div>
+                    <button class="copy-btn" onclick="copyToClipboard('${traceId}')">复制</button>
+                </div>
+            `;
+
+            if (resolverDebug.strategy_used) {
+                html += `
+                    <div class="result-section">
+                        <div class="result-label">解析器调试信息</div>
+                        <div class="result-value" style="font-size: 13px;">
+                            <div>策略：${resolverDebug.strategy_used}</div>
+                            <div>允许类目数：${resolverDebug.allowed_categories_count || 0}</div>
+                            ${resolverDebug.corrections && resolverDebug.corrections.length > 0 ? 
+                                `<div>修正记录：${resolverDebug.corrections.join(', ')}</div>` : ''}
+                        </div>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+            document.getElementById('visionResultSection').classList.remove('hidden');
+        }
+
+        // ② 查找相似商品
+        async function findSimilarSKUs() {
+            const brandNo = document.getElementById('brandNo').value.trim();
+            const traceId = document.getElementById('traceId')?.textContent.trim();
+
+            if (!brandNo) {
+                alert('请输入品牌编码');
+                return;
+            }
+
+            if (!traceId) {
+                alert('请先完成识图分析');
+                return;
+            }
+
+            setButtonLoading('similarBtn', true);
+            hideStatus('similarStatus');
+
+            try {
+                const response = await fetch(`${API_BASE}/ai/product/similar_skus`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        brand_code: brandNo,
+                        top_k: 5,
+                        trace_id: traceId,
+                        mode: 'vector'
+                    })
+                });
+
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.message || '相似商品检索失败');
+                }
+
+                // 显示结果
+                displaySimilarSKUs(result.data.similar_skus || []);
+                
+                // 滚动到结果区域
+                setTimeout(() => scrollToElement('similarResultSection'), 300);
+
+            } catch (error) {
+                showStatus('similarStatus', `错误: ${error.message}`, true);
+                alert(`相似商品检索失败: ${error.message}`);
+            } finally {
+                setButtonLoading('similarBtn', false);
+            }
+        }
+
+        // 显示相似商品结果
+        function displaySimilarSKUs(skus) {
+            const container = document.getElementById('similarResult');
+            
+            if (!skus || skus.length === 0) {
+                container.innerHTML = '<p style="color: #999;">未找到相似商品</p>';
+                return;
+            }
+
+            let html = `
+                <table class="similar-skus-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 60px;">排名</th>
+                            <th>SKU</th>
+                            <th>商品名称</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${skus.map((sku, index) => {
+                            const rank = index + 1;
+                            const rankClass = rank === 1 ? 'top1' : rank === 2 ? 'top2' : rank === 3 ? 'top3' : '';
+                            return `
+                                <tr>
+                                    <td><span class="rank-badge ${rankClass}">${rank}</span></td>
+                                    <td><strong>${sku}</strong></td>
+                                    <td>（商品名称需从商品库查询）</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            container.innerHTML = html;
+            document.getElementById('similarResultSection').classList.remove('hidden');
+        }
+
+        // 页面加载完成后的初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('AI 智能导购演示页面已加载');
+        });
+    </script>
+</body>
+</html>
+

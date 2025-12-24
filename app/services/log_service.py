@@ -107,8 +107,10 @@ async def log_ai_task(
 async def log_vision_analyze_called(
     brand_code: str,
     scene: str,
-    vision_used: bool,
+    trace_id: Optional[str] = None,
+    vision_used: bool = True,
     latency_ms: Optional[int] = None,
+    confidence_level: Optional[str] = None,
 ) -> None:
     """
     埋点：视觉分析接口被调用。
@@ -116,15 +118,19 @@ async def log_vision_analyze_called(
     Args:
         brand_code: 品牌编码
         scene: 使用场景
+        trace_id: 追踪ID（新增）
         vision_used: 是否使用了视觉模型
         latency_ms: 耗时（毫秒）
+        confidence_level: 置信度级别（新增）
     """
     await log_ai_task(
         scene_type="vision_analyze_called",
         input_data={
             "brand_code": brand_code,
             "scene": scene,
+            "trace_id": trace_id,
             "vision_used": vision_used,
+            "confidence_level": confidence_level,
         },
         latency_ms=latency_ms,
     )
@@ -133,9 +139,10 @@ async def log_vision_analyze_called(
 async def log_guide_copy_generated(
     brand_code: str,
     scene: str,
-    primary_copy: str,
-    alternatives_count: int,
-    vision_used: bool,
+    trace_id: Optional[str] = None,
+    primary_copy: str = "",
+    alternatives_count: int = 0,
+    vision_used: bool = True,
     latency_ms: Optional[int] = None,
 ) -> None:
     """
@@ -144,6 +151,7 @@ async def log_guide_copy_generated(
     Args:
         brand_code: 品牌编码
         scene: 使用场景
+        trace_id: 追踪ID（新增）
         primary_copy: 主要话术
         alternatives_count: 备选话术数量
         vision_used: 是否使用了视觉模型
@@ -154,11 +162,95 @@ async def log_guide_copy_generated(
         input_data={
             "brand_code": brand_code,
             "scene": scene,
+            "trace_id": trace_id,
             "vision_used": vision_used,
         },
         output_result={
             "primary_copy": primary_copy,
             "alternatives_count": alternatives_count,
+        },
+        latency_ms=latency_ms,
+    )
+
+
+async def log_similar_skus_called(
+    brand_code: str,
+    mode: str,
+    top_k: int,
+    candidate_count: int,
+    result_count: int,
+    trace_id: Optional[str] = None,
+    latency_ms: Optional[int] = None,
+) -> None:
+    """
+    埋点：相似SKU检索接口被调用。
+    
+    Args:
+        brand_code: 品牌编码
+        mode: 检索模式（rule/vector）
+        top_k: 请求的top_k
+        candidate_count: 候选商品数量
+        result_count: 返回结果数量
+        trace_id: 追踪ID（新增）
+        latency_ms: 耗时（毫秒）
+    """
+    await log_ai_task(
+        scene_type="similar_skus_called",
+        input_data={
+            "brand_code": brand_code,
+            "mode": mode,
+            "top_k": top_k,
+            "candidate_count": candidate_count,
+            "trace_id": trace_id,
+        },
+        output_result={
+            "result_count": result_count,
+        },
+        latency_ms=latency_ms,
+    )
+
+
+async def log_similar_skus_traceid_miss(
+    trace_id: str,
+    latency_ms: Optional[int] = None,
+) -> None:
+    """
+    埋点：相似SKU检索 trace_id 缓存未命中。
+    
+    Args:
+        trace_id: 追踪ID
+        latency_ms: 耗时（毫秒）
+    """
+    await log_ai_task(
+        scene_type="similar_skus_traceid_miss",
+        input_data={
+            "trace_id": trace_id,
+        },
+        latency_ms=latency_ms,
+    )
+
+
+async def log_similar_skus_fallback(
+    brand_code: str,
+    from_mode: str,
+    to_mode: str,
+    latency_ms: Optional[int] = None,
+) -> None:
+    """
+    埋点：相似SKU检索降级（vector->rule）。
+    
+    Args:
+        brand_code: 品牌编码
+        from_mode: 原始模式
+        to_mode: 降级后的模式
+        latency_ms: 耗时（毫秒）
+    """
+    await log_ai_task(
+        scene_type="similar_skus_fallback",
+        input_data={
+            "brand_code": brand_code,
+            "from_mode": from_mode,
+            "to_mode": to_mode,
         },
         latency_ms=latency_ms,
     )
