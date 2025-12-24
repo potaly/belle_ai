@@ -1,6 +1,4 @@
 """FastAPI application entry point."""
-import logging
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -18,12 +16,11 @@ from app.api.v1 import (
 )
 from app.api.v1.router import router as v1_router
 from app.core.config import get_settings
+from app.core.logging_config import init_logging
+from app.core.middleware import TraceIdMiddleware
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
-)
+# Initialize logging system (must be called before creating FastAPI app)
+init_logging()
 
 settings = get_settings()
 app = FastAPI(
@@ -102,6 +99,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add Trace ID middleware (after CORS, before routers)
+app.add_middleware(TraceIdMiddleware)
 
 # Include routers
 app.include_router(v1_router)
