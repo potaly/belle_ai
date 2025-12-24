@@ -13,6 +13,7 @@ from app.api.v1 import (
     product_vision as product_vision_router,
     rag_debug as rag_debug_router,
     sales_graph as sales_graph_router,
+    similar_skus as similar_skus_router,
     vector_search as vector_search_router,
 )
 from app.api.v1.router import router as v1_router
@@ -107,6 +108,7 @@ app.include_router(v1_router)
 app.include_router(copy_router.router)
 app.include_router(product_router.router)
 app.include_router(product_vision_router.router)  # V6.0.0: 拍照识图API
+app.include_router(similar_skus_router.router)  # V6.0.0: 相似SKU检索API
 app.include_router(vector_search_router.router)  # V2: 向量搜索API
 app.include_router(rag_debug_router.router)  # V2: RAG 调试端点（仅 DEBUG 模式）
 app.include_router(intent_router.router)  # V3: 意图分析API

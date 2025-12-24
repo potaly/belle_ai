@@ -9,6 +9,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.repositories.vision_feature_cache_repository import (
+    VisionFeatureCacheRepository,
+)
 from app.schemas.vision import VisionAnalyzeRequest, VisionAnalyzeResponse
 from app.services.log_service import (
     log_guide_copy_generated,
@@ -86,29 +89,47 @@ async def vision_analyze(
             f"[API] Request parameters: brand_code={request.brand_code}, scene={request.scene}"
         )
 
-        # Step 3: 调用视觉分析服务
+        # Step 3: 调用视觉分析服务（传入 db 用于 Category Resolver）
         logger.info("[API] Step 2: Calling vision analysis service...")
         data = await vision_service.analyze(
             image_url=image_url,
             image_base64=image_base64,
             brand_code=request.brand_code,
+            scene=request.scene,
+            db=db,
         )
         logger.info("[API] ✓ Vision analysis completed")
 
-        # Step 4: 计算耗时
+        # Step 4: 保存 trace_id -> vision_features 映射
+        if data.trace_id and data.vision_features:
+            logger.info("[API] Step 3: Saving trace_id to cache...")
+            VisionFeatureCacheRepository.save(
+                db=db,
+                trace_id=data.trace_id,
+                brand_code=request.brand_code,
+                scene=request.scene,
+                vision_features=data.vision_features.model_dump(),
+                ttl_hours=24,
+            )
+            logger.info("[API] ✓ Trace ID saved to cache")
+
+        # Step 5: 计算耗时
         latency_ms = int((time.time() - start_time) * 1000)
 
-        # Step 5: 埋点
-        logger.info("[API] Step 3: Logging events...")
+        # Step 6: 埋点
+        logger.info("[API] Step 4: Logging events...")
         await log_vision_analyze_called(
             brand_code=request.brand_code,
             scene=request.scene,
+            trace_id=data.trace_id,
             vision_used=data.tracking.vision_used,
             latency_ms=latency_ms,
+            confidence_level=data.tracking.confidence_level,
         )
         await log_guide_copy_generated(
             brand_code=request.brand_code,
             scene=request.scene,
+            trace_id=data.trace_id,
             primary_copy=data.guide_chat_copy.primary,
             alternatives_count=len(data.guide_chat_copy.alternatives),
             vision_used=data.tracking.vision_used,
