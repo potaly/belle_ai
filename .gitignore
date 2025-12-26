@@ -10,7 +10,8 @@ __pycache__/
 venv/
 ENV/
 env/
-
+.env.bak
+*.bak
 # IDE
 .vscode/
 .idea/
