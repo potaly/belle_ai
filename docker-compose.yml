@@ -1,103 +1,23 @@
-# docker-compose.yml
-version: '3.8'
+version: "3.8"
 
 services:
   belle-ai-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: belle_ai_belle-ai-service:fix-redis
     container_name: belle-ai-service
     restart: unless-stopped
-    ports:
-      - "${APP_PORT:-18000}:8000"
+
+    network_mode: "host"
+
     env_file:
       - .env
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL:-}
-      - LOG_DIR=/app/logs
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      LOG_DIR: /app/logs
+      TZ: Asia/Shanghai
+
     volumes:
-      # 挂载日志目录（可选，用于持久化日志）
-      - ./logs:/app/logs
-    networks:
-      - belle_ai_net
-    depends_on:
-      mysql:
-        condition: service_healthy
-        required: false
-      redis:
-        condition: service_healthy
-        required: false
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    # 资源限制（可选，根据服务器情况调整）
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
+      - /data/belle_ai/logs:/app/logs
 
-  # 可选 MySQL 容器（仅在需要时启用，使用 profile）
-  mysql:
-    image: mysql:8.0
-    container_name: belle-ai-mysql
-    restart: unless-stopped
-    profiles:
-      - mysql
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-belle_ai}
-      MYSQL_USER: ${MYSQL_USER:-belle_user}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-belle_password}
-    volumes:
-      - mysql_data:/var/lib/mysql
-    ports:
-      - "${MYSQL_PORT:-3307}:3306"
-    networks:
-      - belle_ai_net
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  # 可选 Redis 容器（仅在需要时启用，使用 profile）
-  redis:
-    image: redis:7-alpine
-    container_name: belle-ai-redis
-    restart: unless-stopped
-    profiles:
-      - redis
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - belle_ai_net
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    command: redis-server --appendonly yes
-
-networks:
-  belle_ai_net:
-    name: belle_ai_net
-    driver: bridge
-
-volumes:
-  mysql_data:
-    name: belle_ai_mysql_data
-  redis_data:
-    name: belle_ai_redis_data
-
+    # ✅ 强制用 uvicorn 启动（覆盖掉你 commit 进去的 bash）
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
